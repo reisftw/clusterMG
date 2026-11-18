@@ -19,6 +19,11 @@ on:
         description: "Diretorio temporario e nao enumeravel para download"
         required: true
         type: string
+      package_kind:
+        description: "Produto empacotado"
+        required: false
+        default: "retiradas"
+        type: string
 
 concurrency:
   group: package-retiradas-vm
@@ -29,6 +34,7 @@ permissions:
 
 jobs:
   package:
+    if: inputs.package_kind != 'liliane'
     name: Build and publish VM update package
     runs-on: ubuntu-latest
     environment: production-retiradas
@@ -176,4 +182,97 @@ jobs:
           curl -fsS --retry 5 --retry-delay 2 \
             "https://retiradas.tech/$DOWNLOAD_TOKEN/$PACKAGE_NAME.tar" \
             -o "$PACKAGE_NAME.tar"
+          sha256sum -c "$PACKAGE_NAME.tar.sha256"
+
+  package-liliane:
+    if: inputs.package_kind == 'liliane'
+    name: Build and publish Lili VM update package
+    runs-on: ubuntu-latest
+    environment: production-retiradas
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.VPS_USER || 'root' }}
+      PACKAGE_NAME: ${{ inputs.package_name }}
+      DOWNLOAD_TOKEN: ${{ inputs.download_token }}
+    steps:
+      - name: Validate package inputs
+        run: |
+          [[ "$PACKAGE_NAME" =~ ^liliane-vm-company-update-[A-Za-z0-9._-]+$ ]]
+          [[ "$DOWNLOAD_TOKEN" =~ ^[a-f0-9]{24,64}$ ]]
+
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/liliane/backend/package-lock.json
+            apps/liliane/frontend/package-lock.json
+
+      - name: Validate and build Lili
+        run: |
+          npm ci --prefix apps/liliane/backend --no-audit --no-fund
+          npm ci --prefix apps/liliane/frontend --no-audit --no-fund
+          npm run verify:liliane
+
+      - name: Assemble incremental package
+        run: |
+          package_root="$RUNNER_TEMP/$PACKAGE_NAME"
+          mkdir -p "$package_root/payload/backend" "$package_root/payload/frontend"
+          cp ops/vm-migration/liliane-company-update/apply-update.sh "$package_root/apply-update.sh"
+          chmod 750 "$package_root/apply-update.sh"
+          cp apps/liliane/backend/package*.json "$package_root/payload/backend/"
+          cp -a apps/liliane/backend/dist apps/liliane/backend/migrations "$package_root/payload/backend/"
+          npm ci --omit=dev --no-audit --no-fund --prefix "$package_root/payload/backend"
+          cp -a apps/liliane/frontend/dist "$package_root/payload/frontend/"
+          cat > "$package_root/VERSAO.txt" <<EOF
+          VERSION=20261118-${GITHUB_SHA::7}
+          COMMIT=$GITHUB_SHA
+          TYPE=incremental
+          DATABASE=preserved
+          EOF
+          tar -czf "$package_root/liliane-app.tar.gz" -C "$package_root" payload
+          (cd "$package_root" && sha256sum apply-update.sh VERSAO.txt liliane-app.tar.gz > SHA256SUMS.txt)
+          tar -cf "$GITHUB_WORKSPACE/$PACKAGE_NAME.tar" -C "$RUNNER_TEMP" "$PACKAGE_NAME"
+          sha256sum "$PACKAGE_NAME.tar" > "$PACKAGE_NAME.tar.sha256"
+
+      - name: Verify package
+        run: |
+          sha256sum -c "$PACKAGE_NAME.tar.sha256"
+          staging="$(mktemp -d)"
+          tar -xf "$PACKAGE_NAME.tar" -C "$staging"
+          (cd "$staging/$PACKAGE_NAME" && sha256sum -c SHA256SUMS.txt && bash -n apply-update.sh)
+          tar -tzf "$staging/$PACKAGE_NAME/liliane-app.tar.gz" | grep -q '002_follow_up_decision.sql'
+
+      - name: Configure production SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          install -m 600 .github/known_hosts/retiradas ~/.ssh/known_hosts
+
+      - name: Publish temporary download on VPS
+        run: |
+          remote_dir="/var/www/retiradas/dist/$DOWNLOAD_TOKEN"
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
+            "$VPS_USER@$VPS_HOST" "mkdir -p '$remote_dir' && chmod 755 '$remote_dir'"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
+            "$PACKAGE_NAME.tar" "$PACKAGE_NAME.tar.sha256" "$VPS_USER@$VPS_HOST:$remote_dir/"
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
+            "$VPS_USER@$VPS_HOST" "chmod 644 '$remote_dir/$PACKAGE_NAME.tar' '$remote_dir/$PACKAGE_NAME.tar.sha256'"
+
+      - name: Validate public package
+        run: |
+          validation_dir="$(mktemp -d)"
+          cd "$validation_dir"
+          curl -fsS --retry 5 --retry-delay 2 "https://retiradas.tech/$DOWNLOAD_TOKEN/$PACKAGE_NAME.tar.sha256" -o "$PACKAGE_NAME.tar.sha256"
+          curl -fsS --retry 5 --retry-delay 2 "https://retiradas.tech/$DOWNLOAD_TOKEN/$PACKAGE_NAME.tar" -o "$PACKAGE_NAME.tar"
           sha256sum -c "$PACKAGE_NAME.tar.sha256"
