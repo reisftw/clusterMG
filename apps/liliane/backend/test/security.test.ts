@@ -115,3 +115,9 @@ test("reenvio preserva o destinatário congelado da solicitação", async () => 
   assert.match(source, /m\.recipient_snapshot phone_e164/);
   assert.doesNotMatch(source, /a\.phone_e164 from approval_requests/);
 });
+
+test("alteração de voto registra a transição no histórico", async () => {
+  const { decisionEvent } = await import("../src/app.js");
+  assert.deepEqual(decisionEvent(null, "APPROVED"), { type: "APPROVED", metadata: {} });
+  assert.deepEqual(decisionEvent("APPROVED", "REJECTED"), { type: "DECISION_CHANGED", metadata: { from: "APPROVED", to: "REJECTED" } });
+});

@@ -78,6 +78,12 @@ export function decisionFromSelected(selected: string): "APPROVED" | "REJECTED" 
 
 export const decisionFromSelection = decisionFromSelected;
 
+export function decisionEvent(previous: string | null, current: string): { type: string; metadata: Record<string, string> } {
+  return previous
+    ? { type: "DECISION_CHANGED", metadata: { from: previous, to: current } }
+    : { type: current, metadata: {} };
+}
+
 export function parseTextDecision(body: Record<string, unknown>): { protocol: string; voter: string; decision: "APPROVED" | "REJECTED" | "FOLLOW_UP" } | null {
   const data = (body.data || {}) as Record<string, unknown>;
   const key = (data.key || {}) as Record<string, unknown>;
@@ -214,6 +220,20 @@ export function createApp() {
     res.json(result.rows[0]);
   }));
 
+  app.delete("/requests/:id", requireRole("OPERATOR"), asyncRoute(async (req, res) => {
+    const deleted = await transaction(async (client) => {
+      const scope = requestScope(req, "r");
+      const found = await client.query(`select r.id,r.protocol from approval_requests r where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
+      if (!found.rows[0]) throw Object.assign(new Error("Solicitação não encontrada."), { status: 404 });
+      await client.query("update approval_requests set replaces_request_id=null where replaces_request_id=$1", [found.rows[0].id]);
+      await client.query("delete from approval_decisions where request_id=$1", [found.rows[0].id]);
+      await client.query("delete from approval_requests where id=$1", [found.rows[0].id]);
+      return found.rows[0];
+    });
+    await audit(req.authUser!.id, "DELETE", "approval_request", deleted.id, req, { protocol: deleted.protocol });
+    res.json({ ok: true });
+  }));
+
   app.get("/approvers", requireRole("ADMIN"), asyncRoute(async (_req, res) => { res.json((await pool.query("select * from approvers order by full_name")).rows); }));
   app.post("/approvers", requireRole("ADMIN"), asyncRoute(async (req, res) => {
     const fullName = clean(req.body?.fullName, 180); const internalId = clean(req.body?.internalId, 100);
@@ -288,20 +308,30 @@ export function createApp() {
     if ((!pollId && !textDecision?.protocol) || !(voter || textDecision?.voter) || !parsedDecision) { await pool.query("update webhook_events set status='REVIEW',reason='Evento de voto não verificável',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
     const finalized = await transaction(async (client) => {
       const lookup = textDecision
-        ? await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where r.protocol=$1 and m.kind='POLL' for update", [textDecision.protocol])
-        : await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where m.provider_poll_id=$1 for update", [pollId]);
-      const row = lookup.rows[0]; if (!row || row.status !== "PENDING" || (row.deadline_at && new Date(row.deadline_at) < new Date())) throw Object.assign(new Error("Solicitação não está aberta."), { status: 409 });
+        ? await client.query("select r.*,a.id approver_id,m.recipient_snapshot,d.decision previous_decision from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id left join approval_decisions d on d.request_id=r.id where r.protocol=$1 and m.kind='POLL' for update of r,m", [textDecision.protocol])
+        : await client.query("select r.*,a.id approver_id,m.recipient_snapshot,d.decision previous_decision from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id left join approval_decisions d on d.request_id=r.id where m.provider_poll_id=$1 for update of r,m", [pollId]);
+      const row = lookup.rows[0]; if (!row || !["PENDING", "APPROVED", "REJECTED", "FOLLOW_UP"].includes(row.status) || (!row.previous_decision && row.deadline_at && new Date(row.deadline_at) < new Date())) throw Object.assign(new Error("Solicitação não está aberta."), { status: 409 });
       const verifiedVoter = textDecision?.voter || voter;
       if (voteIdentity(verifiedVoter) !== voteIdentity(row.recipient_snapshot)) throw Object.assign(new Error("Votante não autorizado."), { status: 403 });
       const decision = parsedDecision; const integrity = hmac(`${row.id}|${decision}|${eventId}`);
-      await client.query("insert into approval_decisions(request_id,approver_id,decision,voter_identifier_hash,provider_event_id,provider_message_id,integrity_hash) values($1,$2,$3,$4,$5,$6,$7)", [row.id, row.approver_id, decision, sha256(verifiedVoter), eventId, pollId || eventId, integrity]);
+      if (row.previous_decision === decision) {
+        await client.query("update webhook_events set status='PROCESSED',reason='Voto repetido sem alteração',processed_at=now() where provider_event_id=$1", [eventId]);
+        return { requestId: row.id, protocol: row.protocol, phone: row.recipient_snapshot, decision, changed: false, unchanged: true };
+      }
+      if (row.previous_decision) {
+        await client.query("update approval_decisions set decision=$2,voter_identifier_hash=$3,provider_event_id=$4,provider_message_id=$5,integrity_hash=$6,decided_at=now() where request_id=$1", [row.id, decision, sha256(verifiedVoter), eventId, pollId || eventId, integrity]);
+      } else {
+        await client.query("insert into approval_decisions(request_id,approver_id,decision,voter_identifier_hash,provider_event_id,provider_message_id,integrity_hash) values($1,$2,$3,$4,$5,$6,$7)", [row.id, row.approver_id, decision, sha256(verifiedVoter), eventId, pollId || eventId, integrity]);
+      }
       await client.query("update approval_requests set status=$2,decided_at=now(),updated_at=now() where id=$1", [row.id, decision]);
-      await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,$2,'APPROVER',$3,$4)", [row.id, decision, row.approver_id, { providerEventId: eventId }]);
+      const transition = decisionEvent(row.previous_decision || null, decision);
+      await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,$2,'APPROVER',$3,$4)", [row.id, transition.type, row.approver_id, { ...transition.metadata, providerEventId: eventId }]);
       await client.query("update webhook_events set status='PROCESSED',processed_at=now() where provider_event_id=$1", [eventId]);
-      return { requestId: row.id, protocol: row.protocol, phone: row.recipient_snapshot, decision };
+      return { requestId: row.id, protocol: row.protocol, phone: row.recipient_snapshot, decision, changed: Boolean(row.previous_decision), unchanged: false };
     });
     const decisionLabel = finalized.decision === "APPROVED" ? "APROVADA" : finalized.decision === "REJECTED" ? "REPROVADA" : "EM ACOMPANHAMENTO";
-    await evolution.sendText(finalized.phone, `${finalized.protocol} registrada como ${decisionLabel}.`).catch(async (error) => {
+    if (finalized.unchanged) { res.json({ ok: true, unchanged: true }); return; }
+    await evolution.sendText(finalized.phone, `${finalized.protocol} ${finalized.changed ? "alterada" : "registrada"} como ${decisionLabel}.`).catch(async (error) => {
       await pool.query("insert into approval_events(request_id,event_type,actor_type,metadata) values($1,'CONFIRMATION_FAILED','SYSTEM',$2)", [finalized.requestId, { error: clean((error as Error).message, 300) }]);
     });
     res.json({ ok: true });
@@ -316,8 +346,10 @@ export function createApp() {
     pdf.image(logo, 48, 35, { fit: [115, 58] }).fillColor(navy).fontSize(9).text("COMPROVANTE DE DECISÃO", 330, 45, { width: 217, align: "right" }).fillColor("#667085").fontSize(8).text(row.protocol, 330, 62, { width: 217, align: "right" });
     pdf.moveTo(48, 100).lineTo(547, 100).strokeColor(border).stroke();
     pdf.fillColor(navy).fontSize(21).text(row.subject, 48, 122, { width: 385 });
-    const approved = row.decision === "APPROVED"; const decision = approved ? "APROVADA" : "REPROVADA";
-    pdf.roundedRect(445, 118, 102, 30, 6).fill(approved ? "#ECFDF3" : "#FEF3F2").fillColor(approved ? green : red).fontSize(10).text(decision, 445, 128, { width: 102, align: "center" });
+    const decision = row.decision === "APPROVED" ? "APROVADA" : row.decision === "REJECTED" ? "REPROVADA" : "EM ACOMPANHAMENTO";
+    const decisionColor = row.decision === "APPROVED" ? green : row.decision === "REJECTED" ? red : "#B54708";
+    const decisionBackground = row.decision === "APPROVED" ? "#ECFDF3" : row.decision === "REJECTED" ? "#FEF3F2" : "#FFFAEB";
+    pdf.roundedRect(405, 118, 142, 30, 6).fill(decisionBackground).fillColor(decisionColor).fontSize(9).text(decision, 405, 128, { width: 142, align: "center" });
     const fullDescription = String(row.description || ""); const description = fullDescription.length > 900 ? `${fullDescription.slice(0, 897)}...` : fullDescription;
     pdf.fillColor("#475467").fontSize(9).text(description, 48, 160, { width: 499, height: 92, lineGap: 2, ellipsis: true });
     if (fullDescription.length > 900) pdf.fillColor("#667085").fontSize(7).text("Descrição resumida no comprovante. O conteúdo integral permanece registrado no sistema.", 48, 255, { width: 499 });
