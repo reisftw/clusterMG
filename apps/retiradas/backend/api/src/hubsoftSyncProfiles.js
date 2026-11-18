@@ -458,6 +458,7 @@ async function authenticateWithPlaywright(config) {
 	if (!username || !password) return null;
 	let chromium;
 	try {
+		process.env.PLAYWRIGHT_BROWSERS_PATH ||= "0";
 		({ chromium } = require("playwright"));
 	} catch {
 		const error = new Error(

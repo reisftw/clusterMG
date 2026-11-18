@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { hasAnyPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import {
@@ -39,22 +39,24 @@ function HistoryTable({ mine = false }) {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     try {
       setError("");
+      setLoading(true);
       setItems((await listarEntregasLoja({ mine, q, limit: 50 })).items || []);
     } catch (e) {
       setError(e.message);
-    }
+    } finally { setLoading(false); }
   }, [mine, q]);
   useEffect(() => {
     let active = true;
     listarEntregasLoja({ mine, limit: 50 })
       .then((response) => {
-        if (active) setItems(response.items || []);
+        if (active) { setItems(response.items || []); setLoading(false); }
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (active) { setError(e.message); setLoading(false); }
       });
     return () => {
       active = false;
@@ -81,7 +83,9 @@ function HistoryTable({ mine = false }) {
       {error ? (
         <p className="text-sm font-semibold text-red-700">{error}</p>
       ) : null}
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+		{loading ? <div className="flex min-h-40 items-center justify-center gap-2 text-sm font-bold text-slate-500"><Loader2 className="animate-spin" size={18} /> Carregando entregas...</div> : null}
+		{!loading ? <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
@@ -127,7 +131,8 @@ function HistoryTable({ mine = false }) {
             ))}
           </tbody>
         </table>
-        {!items.length ? (
+		</div> : null}
+        {!loading && !items.length ? (
           <p className="p-8 text-center text-slate-500">
             Nenhuma entrega encontrada.
           </p>
@@ -552,6 +557,7 @@ function NewDelivery() {
 
 export default function StoreDeliveriesPage() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { currentUser } = useAuthContext();
   const canManage = hasAnyPermission(currentUser, ["loja.lojas.manage"]);
   const canHistory = hasAnyPermission(currentUser, [
@@ -570,27 +576,29 @@ export default function StoreDeliveriesPage() {
   const routeTab =
     pathname === "/loja/lojas"
       ? "stores"
-      : pathname === "/loja/historico" || pathname === "/loja/protocolos"
+	  : pathname === "/loja/minhas-entregas"
+		? "mine"
+      : ["/loja/entregas", "/loja/historico", "/loja/protocolos"].includes(pathname)
         ? "history"
         : "new";
-  const [selectedTab, setSelectedTab] = useState("");
-  const tab = selectedTab || routeTab;
+  const tab = routeTab;
+	const tabRoutes = { new: "/loja/nova-entrega", mine: "/loja/minhas-entregas", history: "/loja/entregas", stores: "/loja/lojas" };
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
-      <header>
+	  <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs font-black uppercase text-blue-700">Loja</p>
         <h1 className="text-3xl font-black text-slate-950">Entrega em Loja</h1>
         <p className="text-slate-600">
           Recebimento físico, custódia e protocolo de equipamentos.
         </p>
       </header>
-      <nav className="flex gap-2 overflow-x-auto border-b">
+      <nav className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
         {tabs.map(([key, label, Icon]) => (
           <button
             type="button"
             key={key}
-            onClick={() => setSelectedTab(key)}
-            className={`inline-flex h-12 shrink-0 items-center gap-2 border-b-2 px-3 font-bold ${tab === key ? "border-blue-700 text-blue-700" : "border-transparent text-slate-500"}`}
+			onClick={() => navigate(tabRoutes[key])}
+			className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-md px-4 font-bold ${tab === key ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
           >
             <Icon size={18} />
             {label}

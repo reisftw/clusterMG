@@ -2,6 +2,7 @@ const db = require("../db");
 const auditLog = require("../auditLog");
 const equipmentSerialLookup = require("../equipmentSerialLookup");
 const hubsoft = require("../hubsoftSyncProfiles");
+const sempreIntegration = require("../sempreIntegration");
 const portRelease = require("../serviceOrders/portRelease/portReleaseService");
 const {
   generateReturnReceiptPdf,
@@ -67,17 +68,25 @@ function rowsOf(payload = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
+function arrayOf(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  return [];
+}
+
 function mapClientAccess(row = {}) {
   const service = row.cliente_servico || row.acesso || row.servico || row;
   const client = row.cliente || service.cliente || row;
-  const equipments =
+  const equipments = arrayOf(
     row.equipamentos ||
     service.equipamentos ||
     row.equipamentos_cliente ||
     service.equipamentos_cliente ||
     row.cliente_servico_equipamentos ||
     service.cliente_servico_equipamentos ||
-    [];
+		service.equipamentos?.data ||
+		[],
+  );
   return {
     clientId: clean(client.id_cliente || client.id),
     clientCode: digits(client.codigo_cliente || row.codigo_cliente),
@@ -101,15 +110,33 @@ function mapClientAccess(row = {}) {
       service.empresa?.nome || service.empresa?.razao_social || row.empresa,
     ),
     status: clean(service.status || service.status_contrato || row.status),
-    equipment: (Array.isArray(equipments) ? equipments : []).map((item) => ({
-      assetId: clean(item.id_equipamento || item.equipamento?.id_equipamento || item.id),
-      productName: clean(
-        item.nome || item.equipamento?.nome || item.produto?.nome || item.descricao || "Equipamento",
-      ),
-      model: clean(item.modelo || item.equipamento?.modelo || item.produto?.modelo),
-      mac: clean(item.mac || item.endereco_mac || item.mac_addr || item.phy_addr || item.serie || item.numero_serie),
-      serial: clean(item.serial || item.serie || item.numero_serie),
-    })),
+		equipment: equipments.map((item) => {
+			const equipment = item.equipamento || item.produto || item;
+			return {
+				assetId: clean(
+					item.id_equipamento || item.equipamento?.id_equipamento || item.id,
+				),
+				productName: clean(
+					equipment.nome ||
+						equipment.descricao ||
+						item.nome ||
+						item.descricao ||
+						"Equipamento",
+				),
+				model: clean(equipment.modelo || item.modelo),
+				mac: clean(
+					item.mac ||
+						item.endereco_mac ||
+						item.mac_addr ||
+						item.phy_addr ||
+						item.serie ||
+						item.numero_serie ||
+						equipment.mac ||
+						equipment.serie,
+				),
+				serial: clean(item.serial || item.serie || item.numero_serie),
+			};
+		}),
   };
 }
 
@@ -158,11 +185,51 @@ async function findClientByMac(session, query) {
   )).rows[0];
   let clientCode = digits(local?.codigo_cliente);
   if (!clientCode) {
-    const lookup = await equipmentSerialLookup.lookupBySerial(mac);
-    clientCode = digits(lookup?.hubsoft?.clientCode);
+		const lookup = await equipmentSerialLookup
+			.lookupBySerial(mac)
+			.catch(() => null);
+		clientCode = digits(lookup?.hubsoft?.clientCode);
   }
-  if (!clientCode) return [];
-  return searchAccesses(session, clientCode);
+	if (clientCode) return searchAccesses(session, clientCode);
+	const equipment = await sempreIntegration
+		.consultEquipment(mac)
+		.catch(() => null);
+	const linkedName = clean(
+		equipment?.primary?.vinculadoEm || equipment?.primary?.origemStatus,
+	);
+	if (!linkedName) return [];
+	const rows = await searchAccesses(session, linkedName);
+	const linkedId = clean(equipment?.primary?.vinculadoId);
+	return rows.map((row) => {
+		const mapped = mapClientAccess(row);
+		if (linkedId && ![mapped.contractId, mapped.serviceId].includes(linkedId)) {
+			return row;
+		}
+		const access = row.cliente_servico || row.acesso || row.servico || row;
+		const current = arrayOf(
+			access.equipamentos_cliente || access.equipamentos || row.equipamentos,
+		);
+		if (
+			current.some(
+				(item) => normalizeMac(item.mac || item.phy_addr || item.serie) === mac,
+			)
+		) {
+			return row;
+		}
+		return {
+			...row,
+			cliente_servico: {
+				...access,
+				equipamentos_cliente: [
+					...current,
+					{
+						nome: equipment.primary.produtoNome || "Equipamento",
+						mac,
+					},
+				],
+			},
+		};
+	});
 }
 
 async function searchClients(term) {
@@ -193,8 +260,16 @@ async function searchClients(term) {
       seen.add(key);
       return true;
     })
-    .sort((left, right) => right.equipment.length - left.equipment.length)
-    .slice(0, 1)
+		.sort((left, right) => {
+			const equipmentDifference =
+				right.equipment.length - left.equipment.length;
+			if (equipmentDifference) return equipmentDifference;
+			return String(left.contractId).localeCompare(
+				String(right.contractId),
+				"pt-BR",
+				{ numeric: true },
+			);
+		})
     .map(({ document: _DOCUMENT, ...item }) => item);
   if (!items.length && isMacSearch(query)) {
     const mac = normalizeMac(query);
@@ -678,5 +753,11 @@ module.exports = {
   listStoreUsers,
   saveStore,
   searchClients,
-  __testables: { normalizeMac, validateItems, isMacSearch, mapClientAccess, matchesSearch },
+	__testables: {
+		normalizeMac,
+		validateItems,
+		isMacSearch,
+		mapClientAccess,
+		matchesSearch,
+	},
 };

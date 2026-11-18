@@ -25,6 +25,13 @@ test("mapeia contrato, servico e equipamento em formato aninhado do HubSoft", ()
 	assert.equal(item.equipment[0].mac, "FH-TT99");
 });
 
+test("mapeia lista paginada de equipamentos do acesso HubSoft", () => {
+	const item = service.__testables.mapClientAccess({ cliente_servico: { id_cliente_servico: 5, cliente: { codigo_cliente: "10552", nome_razaosocial: "RODRIGO REIS DIVINO" }, equipamentos_cliente: { data: [{ equipamento: { id_equipamento: 9, nome: "ONU", modelo: "FiberHome" }, mac_addr: "54:4B:54:23:57:28" }] } } });
+	assert.equal(item.contractId, "5");
+	assert.equal(item.equipment[0].mac, "54:4B:54:23:57:28");
+	assert.equal(item.equipment[0].productName, "ONU");
+});
+
 test("busca de cliente aceita nome parcial sem confundir texto com MAC", () => {
 	const item = { clientCode: "44741", clientName: "ÍTALO SILVA VILELA", document: "12345678901", equipment: [{ mac: "FHTT99F06B30" }] };
 	assert.equal(service.__testables.matchesSearch(item, "44741"), true);

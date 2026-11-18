@@ -370,6 +370,7 @@ jobs:
           . /etc/retiradas/api.env
           set +a
           cd "$backend_root"
+          PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium
           npm run migrate:preflight
           mkdir -p "$database_backup_root"
           chmod 700 "$database_backup_root"
