@@ -226,7 +226,7 @@ jobs:
           cp ops/vm-migration/liliane-company-update/apply-update.sh "$package_root/apply-update.sh"
           chmod 750 "$package_root/apply-update.sh"
           cp apps/liliane/backend/package*.json "$package_root/payload/backend/"
-          cp -a apps/liliane/backend/dist apps/liliane/backend/migrations apps/liliane/backend/assets "$package_root/payload/backend/"
+          cp -a apps/liliane/backend/dist apps/liliane/backend/migrations "$package_root/payload/backend/"
           npm ci --omit=dev --no-audit --no-fund --prefix "$package_root/payload/backend"
           cp -a apps/liliane/frontend/dist "$package_root/payload/frontend/"
           cat > "$package_root/VERSAO.txt" <<EOF
