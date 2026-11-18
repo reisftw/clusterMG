@@ -46,6 +46,10 @@ tar -xzf liliane-app.tar.gz -C "$work"
 rm -rf "$release"
 install -d -m 0750 "$release"
 cp -a "$work/payload/." "$release/"
+if [ -f "$release/frontend/dist/index.html" ]; then
+  cp -a "$release/frontend/dist/." "$release/frontend/"
+  rm -rf "$release/frontend/dist"
+fi
 chown -R liliane:liliane "$release"
 chmod 0755 "$release" "$release/frontend"
 
