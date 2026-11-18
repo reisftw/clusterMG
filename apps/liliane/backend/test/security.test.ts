@@ -19,7 +19,10 @@ test("segredos são cifrados com autenticação e não aceitam adulteração", a
   const encrypted = encrypt("segredo-totp");
   assert.notEqual(encrypted, "segredo-totp");
   assert.equal(decrypt(encrypted), "segredo-totp");
-  assert.throws(() => decrypt(`${encrypted.slice(0, -1)}A`));
+  const [iv, tag, data] = encrypted.split(".");
+  const tampered = Buffer.from(data, "base64url");
+  tampered[0] ^= 1;
+  assert.throws(() => decrypt(`${iv}.${tag}.${tampered.toString("base64url")}`));
 });
 
 test("identificador da mensagem aceita os formatos da Evolution", async () => {
