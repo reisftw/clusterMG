@@ -40,6 +40,7 @@
 		"verify:finan": "npm run lint:finan && npm run test:finan && npm run build:finan",
 		"verify:adm": "npm run lint:adm && npm run test:adm && npm run build:adm",
 		"verify:operacao": "npm run lint:operacao && npm run test:operacao && npm run build:operacao",
+		"verify:liliane": "npm test --prefix apps/liliane/backend && npm run typecheck --prefix apps/liliane/backend && npm run build --prefix apps/liliane/backend && npm run typecheck --prefix apps/liliane/frontend && npm run build --prefix apps/liliane/frontend",
 		"verify:all": "npm run verify:retiradas && npm run verify:finan && npm run verify:adm && npm run verify:operacao && npm run test:contracts"
 	},
 	"dependencies": {
