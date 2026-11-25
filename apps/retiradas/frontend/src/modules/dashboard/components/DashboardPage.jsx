@@ -31,6 +31,7 @@ import { useDashboard } from "../hooks/useDashboard";
 import AlertasAutomaticosWidget from "./AlertasAutomaticosWidget";
 import AniversariantesWidget from "./AniversariantesWidget";
 import FeaturedMetasPanel from "./FeaturedMetasPanel";
+import HourlyDeliveryEvolutionCard from "./HourlyDeliveryEvolutionCard";
 import MapaKPICards from "./MapaKPICards";
 import ModernKpiGrid from "./ModernKpiGrid";
 import ProximosFeriados from "./ProximosFeriados";
@@ -766,6 +767,8 @@ function ModernDashboardView({
 				hiddenKeys={kpiHiddenKeys}
 			/>
 
+			<HourlyDeliveryEvolutionCard />
+
 			<div className="columns-1 gap-5 lg:columns-2 xl:columns-3">
 				<div className="mb-5 break-inside-avoid">
 					<TopCidadesCard
@@ -838,6 +841,8 @@ function ClassicDashboardView({
 
 			<MapaKPICards ordens={[]} kpisOverride={mapaKpisOverride} />
 			<SummaryCards resumo={resumo} hiddenKeys={summaryHiddenKeys} />
+
+			<HourlyDeliveryEvolutionCard />
 
 			<div className="columns-1 gap-6 lg:columns-2 xl:columns-3">
 				<div className="mb-6 break-inside-avoid">

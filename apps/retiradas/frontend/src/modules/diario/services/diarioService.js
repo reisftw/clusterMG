@@ -277,6 +277,36 @@ export function subscribeDiarioEntriesByMonth(dateKey, callback, onError) {
 	};
 }
 
+export function subscribeDiarioEvolutionEntries(callback, onError) {
+	let active = true;
+	const load = async () => {
+		try {
+			const entries = (
+				await listVpsDocuments(COLLECTIONS.ACOMPANHAMENTO_DIARIO, {
+					limit: 1000,
+				})
+			)
+				.map((item) => normalizeDiarioEntry(item))
+				.sort((a, b) => a.date.localeCompare(b.date));
+			if (active) callback(entries);
+		} catch (error) {
+			onError?.(error);
+		}
+	};
+	load();
+	const timer = window.setInterval(load, 60000);
+	const unsubscribeRealtime = subscribeRealtimeTopics(
+		["diario", "acompanhamento"],
+		() => load().catch(onError),
+		{ debounceMs: 250 },
+	);
+	return () => {
+		active = false;
+		window.clearInterval(timer);
+		unsubscribeRealtime();
+	};
+}
+
 export function classifyWeeklyProduction(total) {
 	const value = Number(total || 0);
 	if (value > 600) return { label: "Em dia!", tone: "good" };
