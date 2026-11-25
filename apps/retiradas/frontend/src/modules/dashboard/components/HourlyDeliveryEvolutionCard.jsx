@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
-import { subscribeDiarioEvolutionEntries } from "../../diario/services/diarioService";
+import { buscarResumoOperacionalAcompanhamento } from "../../mapas/services/mapasAtualizacoesService";
+import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import {
 	buildHourlyEvolution,
 	saoPauloDateKey,
@@ -98,17 +99,29 @@ export default function HourlyDeliveryEvolutionCard() {
 	const [period, setPeriod] = useState("week");
 	const [entries, setEntries] = useState([]);
 	const [loading, setLoading] = useState(true);
-	useEffect(
-		() =>
-			subscribeDiarioEvolutionEntries(
-				(items) => {
-					setEntries(items);
-					setLoading(false);
-				},
-				() => setLoading(false),
-			),
-		[],
-	);
+	useEffect(() => {
+		let active = true;
+		const load = async () => {
+			try {
+				const summary = await buscarResumoOperacionalAcompanhamento();
+				if (active) setEntries(summary?.hourlyEvolution || []);
+			} finally {
+				if (active) setLoading(false);
+			}
+		};
+		load().catch(() => {});
+		const timer = window.setInterval(load, 60000);
+		const unsubscribe = subscribeRealtimeTopics(
+			["mapa", "metas", "acompanhamento"],
+			() => load().catch(() => {}),
+			{ debounceMs: 1500 },
+		);
+		return () => {
+			active = false;
+			window.clearInterval(timer);
+			unsubscribe();
+		};
+	}, []);
 	const model = useMemo(
 		() => buildHourlyEvolution(saoPauloDateKey(), entries),
 		[entries],
