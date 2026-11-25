@@ -471,6 +471,10 @@ const AppRouter = () => (
 					path={ROUTES.PAINEL_AGENTES}
 					element={<PainelPublico initialTab="agentes" />}
 				/>
+				<Route
+					path={ROUTES.PAINEL_CIDADES}
+					element={<PainelPublico initialTab="cidades" />}
+				/>
 				<Route path={ROUTES.DEVOLUCAO_PUBLICO} element={<DevolucaoPage />} />
 				<Route path={ROUTES.DUVIDAS_PUBLICO} element={<DuvidasPublicoPage />} />
 				<Route path={ROUTES.PAINEL_MAPA} element={<MapaPublicoPage />} />

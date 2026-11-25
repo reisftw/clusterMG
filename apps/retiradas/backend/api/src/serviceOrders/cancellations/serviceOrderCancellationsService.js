@@ -1,6 +1,7 @@
 const db = require("../../db");
 const documents = require("../../documents");
 const regionaisRepository = require("../../regionaisRepository");
+const { broadcastRealtime } = require("../../realtime");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -60,6 +61,147 @@ function normalizeCityKey(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.replace(/\s+/g, " ")
 		.toLowerCase();
+}
+
+function currentYear() {
+	return Number(
+		new Intl.DateTimeFormat("en-US", {
+			timeZone: TIME_ZONE,
+			year: "numeric",
+		}).format(new Date()),
+	);
+}
+
+function currentYearMonth() {
+	const parts = new Intl.DateTimeFormat("en-US", {
+		timeZone: TIME_ZONE,
+		year: "numeric",
+		month: "2-digit",
+	}).formatToParts(new Date());
+	const year = parts.find((part) => part.type === "year")?.value;
+	const month = parts.find((part) => part.type === "month")?.value;
+	return `${year}-${month}`;
+}
+
+function parseYear(value) {
+	const year = Number(value || currentYear());
+	return Number.isInteger(year) && year >= 2000 && year <= 2100
+		? year
+		: currentYear();
+}
+
+function emptyCompanyTotals() {
+	return { SEMPRE: 0, ONNET: 0 };
+}
+
+function buildPublicCancellationCities(rows = [], year = currentYear(), updatedAt = null) {
+	const months = Array.from({ length: 12 }, (_, index) => ({
+		competencia: `${year}-${String(index + 1).padStart(2, "0")}`,
+		total: 0,
+		sempre: 0,
+		onnet: 0,
+	}));
+	const cities = new Map();
+	const regionals = new Map();
+	const companies = emptyCompanyTotals();
+
+	for (const row of rows) {
+		const competencia = cleanText(row.competencia);
+		const monthIndex = Number(competencia.slice(5, 7)) - 1;
+		if (monthIndex < 0 || monthIndex > 11) continue;
+		const company = normalizeKey(row.empresa);
+		if (!Object.hasOwn(companies, company)) continue;
+		const total = Number(row.total || 0);
+		const cityName = cleanText(row.cidade) || "Sem cidade";
+		const regionalName = cleanText(row.regional) || "Sem regional";
+		const cityKey = `${normalizeCityKey(cityName)}|${normalizeKey(regionalName)}`;
+		const city = cities.get(cityKey) || {
+			cidade: cityName,
+			regional: regionalName,
+			total: 0,
+			sempre: 0,
+			onnet: 0,
+			mensal: months.map((month) => ({ ...month, total: 0, sempre: 0, onnet: 0 })),
+		};
+		const regional = regionals.get(normalizeKey(regionalName)) || {
+			regional: regionalName,
+			total: 0,
+			sempre: 0,
+			onnet: 0,
+		};
+		const companyKey = company === "SEMPRE" ? "sempre" : "onnet";
+
+		city.total += total;
+		city[companyKey] += total;
+		city.mensal[monthIndex].total += total;
+		city.mensal[monthIndex][companyKey] += total;
+		regional.total += total;
+		regional[companyKey] += total;
+		months[monthIndex].total += total;
+		months[monthIndex][companyKey] += total;
+		companies[company] += total;
+		cities.set(cityKey, city);
+		regionals.set(normalizeKey(regionalName), regional);
+	}
+
+	const cityItems = [...cities.values()].sort(
+		(left, right) => right.total - left.total || left.cidade.localeCompare(right.cidade),
+	);
+	const regionalItems = [...regionals.values()].sort(
+		(left, right) => right.total - left.total || left.regional.localeCompare(right.regional),
+	);
+	const total = companies.SEMPRE + companies.ONNET;
+	const currentMonth = currentYearMonth();
+
+	return {
+		year,
+		currentMonth,
+		updatedAt,
+		totals: {
+			total,
+			sempre: companies.SEMPRE,
+			onnet: companies.ONNET,
+			cities: cityItems.length,
+			regionals: regionalItems.length,
+			currentMonth: months.find((month) => month.competencia === currentMonth)?.total || 0,
+		},
+		months,
+		cities: cityItems,
+		regionals: regionalItems,
+	};
+}
+
+async function getPublicCancellationCities(query = {}) {
+	const year = parseYear(query.year);
+	const [aggregate, freshness] = await Promise.all([
+		db.query(
+			`select competencia,
+			        coalesce(cidade, 'Sem cidade') as cidade,
+			        coalesce(regional_nome, 'Sem regional') as regional,
+			        empresa_normalizada as empresa,
+			        count(*)::int as total
+			   from service_order_cancellation_records
+			  where competencia like $1
+			    and empresa_normalizada in ('SEMPRE', 'ONNET')
+			  group by competencia,
+			           coalesce(cidade, 'Sem cidade'),
+			           coalesce(regional_nome, 'Sem regional'),
+			           empresa_normalizada
+			  order by competencia, total desc`,
+			[`${year}-%`],
+		),
+		db.query(
+			`select max(last_synced_at) as updated_at
+			   from service_order_cancellation_competencies
+			  where competencia like $1`,
+			[`${year}-%`],
+		),
+	]);
+	return buildPublicCancellationCities(
+		aggregate.rows,
+		year,
+		freshness.rows[0]?.updated_at || null,
+	);
 }
 
 function isExcludedAgentCityKey(value) {
@@ -995,6 +1137,10 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 				error,
 			);
 		}
+		broadcastRealtime("cancellations", {
+			competencia: normalizedCompetencia,
+			updatedAt: new Date().toISOString(),
+		});
 		return {
 			id: runId,
 			competencia: normalizedCompetencia,
@@ -1556,6 +1702,7 @@ module.exports = {
 	VIEW_PERMISSIONS,
 	exportCsv,
 	getRecord,
+	getPublicCancellationCities,
 	getSummary,
 	getSyncRun,
 	listCancellations,
@@ -1566,6 +1713,7 @@ module.exports = {
 	startHistorySync,
 	startSync,
 	validateCompetency,
+	_buildPublicCancellationCities: buildPublicCancellationCities,
 	_normalizeCompany: normalizeCompany,
 	_normalizeTechnology: normalizeTechnology,
 	_parseDate: parseDate,

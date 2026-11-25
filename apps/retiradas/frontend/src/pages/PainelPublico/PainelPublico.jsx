@@ -4,9 +4,11 @@ import RetorninhoLoader from "../../components/ui/RetorninhoLoader";
 import { obterMesAtual } from "../../utils/mes";
 import HeaderPainel from "./components/HeaderPainel";
 import { useAgentes } from "./hooks/useAgentes";
+import { useCancellationCities } from "./hooks/useCancellationCities";
 import { useMapaOS } from "./hooks/useMapaOS";
 import { useRetiradas } from "./hooks/useRetiradas";
 import TabAgentes from "./tabs/TabAgentes";
+import TabCidades from "./tabs/TabCidades";
 import TabMapaOS from "./tabs/TabMapaOS";
 import TabRetiradas from "./tabs/TabRetiradas";
 import "./PainelPublico.css";
@@ -17,6 +19,7 @@ export default function PainelPublico({ initialTab = "retiradas" }) {
 
 	const retiradas = useRetiradas(activeTab === "retiradas");
 	const agentes = useAgentes(activeTab === "agentes");
+	const cidades = useCancellationCities(activeTab === "cidades");
 	const mapaOS = useMapaOS(activeTab === "mapa");
 
 	const displayMonth = month;
@@ -25,6 +28,7 @@ export default function PainelPublico({ initialTab = "retiradas" }) {
 	let loading = mapaOS.loading;
 	if (activeTab === "retiradas") loading = retiradas.loading;
 	else if (activeTab === "agentes") loading = agentes.loading;
+	else if (activeTab === "cidades") loading = cidades.loading;
 
 	return (
 		<div className="painel-publico-page">
@@ -34,9 +38,11 @@ export default function PainelPublico({ initialTab = "retiradas" }) {
 				activeTab={activeTab}
 				fbStatusRetiradas={retiradas.fbStatus}
 				fbStatusAgentes={agentes.fbStatus}
+				fbStatusCidades={cidades.fbStatus}
 				fbStatusMapa={mapaOS.fbStatus}
 				lastUpdateRetiradas={retiradas.lastUpdate}
 				lastUpdateAgentes={agentes.lastUpdate}
+				lastUpdateCidades={cidades.lastUpdate}
 				lastUpdateMapa={mapaOS.lastUpdate}
 			/>
 
@@ -79,6 +85,15 @@ export default function PainelPublico({ initialTab = "retiradas" }) {
 							allData={mapaOS.allData}
 							month={displayMonth}
 							lastUpdate={mapaOS.lastUpdate}
+						/>
+					)}
+
+					{activeTab === "cidades" && (
+						<TabCidades
+							data={cidades.data}
+							month={displayMonth}
+							error={cidades.error}
+							onRefresh={cidades.refresh}
 						/>
 					)}
 				</>

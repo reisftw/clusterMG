@@ -1,6 +1,6 @@
 ﻿import { ClipboardList, Map, Route, ShieldCheck } from "lucide-react";
-import PublicNotificationsButton from "../../../components/layout/PublicNotificationsButton";
 import PwaInstallButton from "../../../components/layout/PwaInstallButton";
+import { Building2 } from "lucide-react";
 import { ROUTES } from "../../../router/routes";
 import { resolveVpsDate } from "../../../services/vpsDate";
 
@@ -22,6 +22,7 @@ const MESES_2026 = [
 const TAB_TITLES = {
 	retiradas: "Dashboard Retiradas",
 	agentes: "Dashboard Agentes Autorizados",
+	cidades: "Cancelamentos por Cidade",
 	relatorios: "Central de Relatórios",
 	mapa: "Dashboard Mapa de O.S",
 	match: "Dashboard Mapa de O.S",
@@ -55,16 +56,19 @@ export default function HeaderPainel({
 	activeTab,
 	fbStatusRetiradas,
 	fbStatusAgentes,
+	fbStatusCidades,
 	fbStatusMapa,
 	fbStatusRelatorios,
 	lastUpdateRetiradas,
 	lastUpdateAgentes,
+	lastUpdateCidades,
 	lastUpdateMapa,
 	lastUpdateRelatorios,
 }) {
 	const fbStatus = resolveActiveValue(activeTab, {
 		retiradas: fbStatusRetiradas,
 		agentes: fbStatusAgentes,
+		cidades: fbStatusCidades,
 		relatorios: fbStatusRelatorios,
 		mapa: fbStatusMapa,
 	});
@@ -72,6 +76,7 @@ export default function HeaderPainel({
 		resolveActiveValue(activeTab, {
 			retiradas: lastUpdateRetiradas,
 			agentes: lastUpdateAgentes,
+			cidades: lastUpdateCidades,
 			relatorios: lastUpdateRelatorios,
 			mapa: lastUpdateMapa,
 		}),
@@ -118,7 +123,14 @@ export default function HeaderPainel({
 						<ShieldCheck size={14} aria-hidden="true" />
 						Agentes
 					</button>
-					<PublicNotificationsButton className="public-install-btn public-header-btn" />
+					<button
+						type="button"
+						className={`painel-tab ${activeTab === "cidades" ? "active" : ""}`}
+						onClick={() => window.location.assign(ROUTES.PAINEL_CIDADES)}
+					>
+						<Building2 size={14} aria-hidden="true" />
+						Cidades
+					</button>
 					<PwaInstallButton
 						labelMode="full"
 						className="public-install-btn public-header-btn"
