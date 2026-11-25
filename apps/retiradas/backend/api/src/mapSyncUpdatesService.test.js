@@ -40,6 +40,21 @@ test("divides a 31-day month into balanced periods covering every day", () => {
 	});
 });
 
+test("agrupa a evolução horária pela mesma produção operacional do acompanhamento", () => {
+	assert.deepEqual(
+		service.buildHourlyEvolutionEntries([
+			{ day: "2026-11-24", hour: "11", total: 10 },
+			{ day: "2026-11-24", hour: "11", total: 2 },
+			{ day: "2026-11-25", hour: "11", total: 15 },
+			{ day: "2026-11-25", hour: "14", total: 4 },
+		]),
+		[
+			{ date: "2026-11-24", horarios: { "11h": 12 } },
+			{ date: "2026-11-25", horarios: { "11h": 15, "14h": 4 } },
+		],
+	);
+});
+
 for (const status of ["FAILED", "FAILED_AUTH", "INCOMPLETE", "SCHEMA_CHANGED", "SUSPICIOUS", "VALID_EMPTY_RESULT"]) {
 	test(`${status} preserves the valid snapshot without recording removals`, async () => {
 		runStatus = status;

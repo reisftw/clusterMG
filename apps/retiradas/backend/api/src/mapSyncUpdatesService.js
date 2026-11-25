@@ -85,6 +85,14 @@ function addDays(dateText, days) {
 	return date.toISOString().slice(0, 10);
 }
 
+function previousMonthStart(dateText) {
+	const date = new Date(`${dateText}T12:00:00.000Z`);
+	if (Number.isNaN(date.getTime())) return dateText;
+	date.setUTCDate(1);
+	date.setUTCMonth(date.getUTCMonth() - 1);
+	return date.toISOString().slice(0, 10);
+}
+
 function normalizeDate(value, fallback = todaySaoPaulo()) {
 	const raw = text(value);
 	return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : fallback;
@@ -568,6 +576,28 @@ async function getHourlyProduction(date = todaySaoPaulo()) {
 	return [...hours].sort(([a], [b]) => a.localeCompare(b)).map(([hour, total]) => ({ hour: `${hour}h`, total }));
 }
 
+function buildHourlyEvolutionEntries(rows = []) {
+	const byDate = new Map();
+	for (const row of rows) {
+		const date = normalizeDate(row.day, "");
+		const hour = text(row.hour);
+		if (!date || !/^\d{2}$/.test(hour)) continue;
+		const entry = byDate.get(date) || { date, horarios: {} };
+		const label = `${hour}h`;
+		entry.horarios[label] = number(entry.horarios[label]) + number(row.total);
+		byDate.set(date, entry);
+	}
+	return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function getHourlyEvolution(date = todaySaoPaulo()) {
+	const rows = await rankingService.getOperationalProduction({
+		start_date: previousMonthStart(date),
+		end_date: date,
+	});
+	return buildHourlyEvolutionEntries(rows);
+}
+
 async function getDailyProduction(date = todaySaoPaulo()) {
 	const rows = await rankingService.getOperationalProduction({ start_date: date, end_date: date });
 	return { date, total: rows.reduce((sum, row) => sum + number(row.total), 0), meta: null, percent: null, remaining: null,
@@ -711,12 +741,13 @@ async function getClosedCities(date = todaySaoPaulo()) {
 
 async function loadOperationalSummary(date) {
 	const weekDate = date;
-	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, topRanking, openedCities, closedCities, activeOpenCities, activeOpenRegionals, activeOpenCounts] =
+	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, hourlyEvolution, topRanking, openedCities, closedCities, activeOpenCities, activeOpenRegionals, activeOpenCounts] =
 		await Promise.all([
 			getLatestUpdate(),
 			getDailyProduction(date),
 			getWeeklyProduction(weekDate),
 			getHourlyProduction(date),
+			getHourlyEvolution(date),
 			rankingService.getRanking({
 				start_date: date,
 				end_date: date,
@@ -737,6 +768,7 @@ async function loadOperationalSummary(date) {
 		dailyProduction,
 		weeklyProduction,
 		hourlyProduction,
+		hourlyEvolution,
 		topTechnicians: (topRanking.ranking || []).map((item) => ({
 			id: item.id,
 			label: item.name,
@@ -785,6 +817,7 @@ async function getOperationalSummary(query = {}, { includeCacheMeta = false } = 
 }
 
 module.exports = {
+	buildHourlyEvolutionEntries,
 	captureActiveMapSnapshot,
 	getFourWeekMonthRange,
 	getLatestUpdate,
