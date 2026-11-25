@@ -23,18 +23,17 @@ function formatValue(value) {
 function ChangeBadge({ difference, percentage }) {
 	const positive = difference > 0;
 	const negative = difference < 0;
-	const Icon = positive ? ArrowUpRight : negative ? ArrowDownRight : ArrowRight;
-	const colors = positive
-		? "bg-emerald-50 text-emerald-700"
-		: negative
-			? "bg-rose-50 text-rose-700"
-			: "bg-slate-100 text-slate-600";
-	const label =
-		percentage === null
-			? difference > 0
-				? "novo volume"
-				: "sem base"
-			: `${percentage > 0 ? "+" : ""}${formatValue(percentage)}%`;
+	let Icon = ArrowRight;
+	let colors = "bg-slate-100 text-slate-600";
+	if (positive) {
+		Icon = ArrowUpRight;
+		colors = "bg-emerald-50 text-emerald-700";
+	} else if (negative) {
+		Icon = ArrowDownRight;
+		colors = "bg-rose-50 text-rose-700";
+	}
+	let label = `${percentage > 0 ? "+" : ""}${formatValue(percentage)}%`;
+	if (percentage === null) label = difference > 0 ? "novo volume" : "sem base";
 
 	return (
 		<span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold ${colors}`}>
@@ -111,9 +110,42 @@ export default function HourlyDeliveryEvolutionCard() {
 		[],
 	);
 	const model = useMemo(
-		() => buildHourlyEvolution(entries, saoPauloDateKey()),
+		() => buildHourlyEvolution(saoPauloDateKey(), entries),
 		[entries],
 	);
+	let cardContent = (
+		<p className="py-8 text-center text-sm text-slate-500">As entregas por horário aparecerão após a próxima atualização.</p>
+	);
+	if (loading) {
+		cardContent = <p className="py-8 text-center text-sm text-slate-500">Carregando evolução...</p>;
+	} else if (model.hasToday || model.hasYesterday) {
+		cardContent = (
+			<>
+				<div className="flex flex-wrap items-end justify-between gap-3">
+					<div>
+						<p className="text-xs font-bold uppercase text-slate-500">Entregas registradas por horário</p>
+						<p className="mt-1 text-3xl font-black text-slate-950">{formatValue(model.todayTotal)}</p>
+						<p className="text-xs text-slate-500">Ontem: {formatValue(model.yesterdayTotal)}</p>
+					</div>
+					<ChangeBadge difference={model.difference} percentage={model.percentage} />
+				</div>
+				<div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+					{model.hours.map((item) => (
+						<div key={item.hour} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+							<div className="flex items-center gap-2">
+								<Clock3 className="h-4 w-4 text-blue-600" aria-hidden="true" />
+								<div>
+									<p className="text-xs font-bold text-slate-500">{item.hour}</p>
+									<p className="font-black text-slate-950">{formatValue(item.current)} <span className="font-medium text-slate-400">/ {formatValue(item.previous)}</span></p>
+								</div>
+							</div>
+							<ChangeBadge difference={item.difference} percentage={item.percentage} />
+						</div>
+					))}
+				</div>
+			</>
+		);
+	}
 
 	return (
 		<>
@@ -137,39 +169,7 @@ export default function HourlyDeliveryEvolutionCard() {
 					</button>
 				</div>
 
-				<div className="p-5">
-					{loading ? (
-						<p className="py-8 text-center text-sm text-slate-500">Carregando evolução...</p>
-					) : !model.hasToday && !model.hasYesterday ? (
-						<p className="py-8 text-center text-sm text-slate-500">As entregas por horário aparecerão após a próxima atualização.</p>
-					) : (
-						<>
-							<div className="flex flex-wrap items-end justify-between gap-3">
-								<div>
-									<p className="text-xs font-bold uppercase text-slate-500">Entregas registradas por horário</p>
-									<p className="mt-1 text-3xl font-black text-slate-950">{formatValue(model.todayTotal)}</p>
-									<p className="text-xs text-slate-500">Ontem: {formatValue(model.yesterdayTotal)}</p>
-								</div>
-								<ChangeBadge difference={model.difference} percentage={model.percentage} />
-							</div>
-
-							<div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-								{model.hours.map((item) => (
-									<div key={item.hour} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
-										<div className="flex items-center gap-2">
-											<Clock3 className="h-4 w-4 text-blue-600" aria-hidden="true" />
-											<div>
-												<p className="text-xs font-bold text-slate-500">{item.hour}</p>
-												<p className="font-black text-slate-950">{formatValue(item.current)} <span className="font-medium text-slate-400">/ {formatValue(item.previous)}</span></p>
-											</div>
-										</div>
-										<ChangeBadge difference={item.difference} percentage={item.percentage} />
-									</div>
-								))}
-							</div>
-						</>
-					)}
-				</div>
+				<div className="p-5">{cardContent}</div>
 			</section>
 
 			<ModalShell

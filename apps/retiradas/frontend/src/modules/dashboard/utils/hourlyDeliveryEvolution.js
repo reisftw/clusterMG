@@ -14,7 +14,7 @@ function shiftDateKey(key, days) {
 }
 
 function hourOrder(label) {
-	const match = String(label).match(/^(\d{1,2})(?:h|:)?(\d{2})?/i);
+	const match = /^(\d{1,2})[h:]?(\d{2})?/i.exec(String(label));
 	return match ? Number(match[1]) * 60 + Number(match[2] || 0) : 9999;
 }
 
@@ -93,7 +93,7 @@ function comparePeriods(currentEntries, previousEntries) {
 	};
 }
 
-export function buildHourlyEvolution(entries = [], todayKey) {
+export function buildHourlyEvolution(todayKey, entries = []) {
 	const normalized = entries
 		.map(normalizeEntry)
 		.filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry.date));

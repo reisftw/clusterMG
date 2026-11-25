@@ -190,7 +190,7 @@ export function subscribeDiarioLogsByMonth(dateKey, callback, onError) {
 			onError?.(error);
 		}
 	};
-	load();
+	load().catch(onError);
 	const timer = window.setInterval(load, 30000);
 	const unsubscribeRealtime = subscribeRealtimeTopics(
 		["diario", "acompanhamento"],
@@ -293,7 +293,7 @@ export function subscribeDiarioEvolutionEntries(callback, onError) {
 			onError?.(error);
 		}
 	};
-	load();
+	load().catch(onError);
 	const timer = window.setInterval(load, 60000);
 	const unsubscribeRealtime = subscribeRealtimeTopics(
 		["diario", "acompanhamento"],

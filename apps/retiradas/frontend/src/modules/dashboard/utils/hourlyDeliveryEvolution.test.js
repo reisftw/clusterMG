@@ -7,11 +7,11 @@ import {
 describe("hourlyDeliveryEvolution", () => {
 	it("calcula diferença absoluta e percentual entre hoje e ontem", () => {
 		const model = buildHourlyEvolution(
+			"2026-11-25",
 			[
 				{ date: "2026-11-24", horarios: { "11h": 10, "14h": 20 } },
 				{ date: "2026-11-25", horarios: { "11h": 15, "14h": 15 } },
 			],
-			"2026-11-25",
 		);
 
 		expect(model.hours[0]).toMatchObject({
@@ -31,6 +31,7 @@ describe("hourlyDeliveryEvolution", () => {
 
 	it("compara semana e mês pela média dos dias disponíveis", () => {
 		const model = buildHourlyEvolution(
+			"2026-11-25",
 			[
 				{ date: "2026-10-20", horarios: { "11h": 5 } },
 				{ date: "2026-10-21", horarios: { "11h": 15 } },
@@ -39,7 +40,6 @@ describe("hourlyDeliveryEvolution", () => {
 				{ date: "2026-11-24", horarios: { "11h": 20 } },
 				{ date: "2026-11-25", horarios: { "11h": 30 } },
 			],
-			"2026-11-25",
 		);
 
 		expect(model.week.currentTotalAverage).toBeCloseTo(70 / 3);
