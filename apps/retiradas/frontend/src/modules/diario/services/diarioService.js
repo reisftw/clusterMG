@@ -190,7 +190,7 @@ export function subscribeDiarioLogsByMonth(dateKey, callback, onError) {
 			onError?.(error);
 		}
 	};
-	load();
+	load().catch(onError);
 	const timer = window.setInterval(load, 30000);
 	const unsubscribeRealtime = subscribeRealtimeTopics(
 		["diario", "acompanhamento"],
@@ -268,6 +268,36 @@ export function subscribeDiarioEntriesByMonth(dateKey, callback, onError) {
 		() => {
 			load().catch(onError);
 		},
+		{ debounceMs: 250 },
+	);
+	return () => {
+		active = false;
+		window.clearInterval(timer);
+		unsubscribeRealtime();
+	};
+}
+
+export function subscribeDiarioEvolutionEntries(callback, onError) {
+	let active = true;
+	const load = async () => {
+		try {
+			const entries = (
+				await listVpsDocuments(COLLECTIONS.ACOMPANHAMENTO_DIARIO, {
+					limit: 1000,
+				})
+			)
+				.map((item) => normalizeDiarioEntry(item))
+				.sort((a, b) => a.date.localeCompare(b.date));
+			if (active) callback(entries);
+		} catch (error) {
+			onError?.(error);
+		}
+	};
+	load().catch(onError);
+	const timer = window.setInterval(load, 60000);
+	const unsubscribeRealtime = subscribeRealtimeTopics(
+		["diario", "acompanhamento"],
+		() => load().catch(onError),
 		{ debounceMs: 250 },
 	);
 	return () => {
