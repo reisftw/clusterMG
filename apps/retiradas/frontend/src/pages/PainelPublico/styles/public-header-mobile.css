@@ -1,0 +1,12 @@
+@media (max-width: 640px) {
+	.header-left > div {
+		min-width: 0;
+	}
+
+	.header h1 {
+		max-width: 100%;
+		font-size: 22px;
+		line-height: 1.15;
+		overflow-wrap: anywhere;
+	}
+}
