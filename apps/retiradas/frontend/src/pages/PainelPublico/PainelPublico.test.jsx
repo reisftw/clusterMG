@@ -6,6 +6,7 @@ const painelMocks = vi.hoisted(() => ({
 	retiradas: vi.fn(),
 	agentes: vi.fn(),
 	mapaOS: vi.fn(),
+	cidades: vi.fn(),
 }));
 
 vi.mock("./hooks/useRetiradas", () => ({
@@ -18,6 +19,10 @@ vi.mock("./hooks/useAgentes", () => ({
 
 vi.mock("./hooks/useMapaOS", () => ({
 	useMapaOS: painelMocks.mapaOS,
+}));
+
+vi.mock("./hooks/useCancellationCities", () => ({
+	useCancellationCities: painelMocks.cidades,
 }));
 
 vi.mock("../../utils/mes", () => ({
@@ -60,6 +65,14 @@ vi.mock("./tabs/TabMapaOS", () => ({
 	),
 }));
 
+vi.mock("./tabs/TabCidades", () => ({
+	default: ({ month, data }) => (
+		<section data-testid="tab-cidades">
+			Cidades {month} {data?.totals?.total}
+		</section>
+	),
+}));
+
 vi.mock("../../components/ui/RetorninhoLoader", () => ({
 	default: ({ title, description }) => (
 		<div role="status">
@@ -90,6 +103,14 @@ describe("PainelPublico", () => {
 		painelMocks.retiradas.mockReturnValue(baseHook());
 		painelMocks.agentes.mockReturnValue(baseHook());
 		painelMocks.mapaOS.mockReturnValue(baseHook());
+		painelMocks.cidades.mockReturnValue({
+			data: { totals: { total: 30 } },
+			loading: false,
+			error: "",
+			fbStatus: "ok",
+			lastUpdate: "2026-11-25T12:00:00.000Z",
+			refresh: vi.fn(),
+		});
 	});
 
 	it("renderiza loading enquanto a aba ativa carrega", () => {
@@ -158,5 +179,14 @@ describe("PainelPublico", () => {
 		expect(screen.getByTestId("painel-tab")).toHaveTextContent("mapa");
 		expect(screen.getByTestId("painel-month")).toHaveTextContent("Março");
 		expect(screen.getByTestId("tab-mapa")).toHaveTextContent("Mapa Março");
+	});
+
+	it("renderiza os cancelamentos por cidades no mes selecionado", () => {
+		render(<PainelPublico initialTab="cidades" />);
+
+		expect(screen.getByTestId("painel-tab")).toHaveTextContent("cidades");
+		expect(screen.getByTestId("tab-cidades")).toHaveTextContent(
+			"Cidades Março 30",
+		);
 	});
 });

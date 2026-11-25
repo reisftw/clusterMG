@@ -122,6 +122,7 @@ export const ROUTES = {
 
 	PAINEL_PUBLICO: "/painel",
 	PAINEL_AGENTES: "/painel/agentes",
+	PAINEL_CIDADES: "/painel/cidades",
 	PAINEL_RELATORIOS: "/painel/relatorios",
 	DUVIDAS_PUBLICO: "/duvidas",
 	DEVOLUCAO_PUBLICO: "/devolucao",

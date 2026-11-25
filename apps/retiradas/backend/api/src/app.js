@@ -67,6 +67,7 @@ const createNotificationsRouter = require("./notifications/routes/notificationsR
 const createPushNotificationsRouter = require("./pushNotifications/routes/pushNotificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
+const serviceOrderCancellationsService = require("./serviceOrders/cancellations/serviceOrderCancellationsService");
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const createServiceOrderRequestsRouter = require("./serviceOrders/requests/routes/serviceOrderRequestsRoutes");
 const createPortReleaseRouter = require("./serviceOrders/portRelease/routes/portReleaseRoutes");
@@ -3024,6 +3025,23 @@ function createApp() {
 			next(error);
 		}
 	});
+
+	app.get(
+		"/api/public/cancellations/cities",
+		publicReadLimiter,
+		async (req, res, next) => {
+			try {
+				res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+				res.json(
+					await serviceOrderCancellationsService.getPublicCancellationCities(
+						req.query || {},
+					),
+				);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 
 	app.get("/api/public/static/:domain", publicReadLimiter, async (req, res, next) => {
 		try {
