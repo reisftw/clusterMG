@@ -23,7 +23,7 @@ test("normaliza status do contrato HubSoft", () => {
 
 test("evidência mantém apenas campos necessários para auditoria", () => {
 	const result = __testables.evidence({ id_ordem_servico: 7, numero_ordem_servico: "OS-99", codigo_cliente: "001", id_tipo_ordem_servico: 12, tipo_ordem_servico: { id_tipo_ordem_servico: 12, descricao: "Retirada" }, status: "pendente", token: "não deve sair" });
-	assert.deepEqual(result, { serviceOrderId: "7", serviceOrderNumber: "99", clientCode: "001", typeId: 12, typeName: "Retirada", status: "pendente" });
+	assert.deepEqual(result, { serviceOrderId: "7", serviceOrderNumber: "99", clientCode: "001", typeId: 12, typeName: "Retirada", status: "pendente", technicians: [], startTime: "", endTime: "", duration: "", scheduled: false });
 });
 
 const config = { source_types: [{ id: 12, name: "Retirada" }], target_type: { id: 99, name: "Liberação de Portas" }, open_statuses: ["pendente", "aguardando_agendamento"] };
@@ -57,6 +57,27 @@ test("mudança de tipo preserva os demais dados da O.S", () => {
 	assert.equal(original.id_tipo_ordem_servico, 12);
 });
 
+test("normalização operacional define FILA, horários, duração e remove agenda", () => {
+	const queueTechnician = { id: 694, name: "FILA" };
+	const changed = __testables.applyOperationalTarget(
+		{ id_ordem_servico: 1, tecnicos: [{ id: 7 }], agendamento_ordem_servico: { id_agendamento_ordem_servico: 8 } },
+		{ id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" },
+		queueTechnician,
+		"2026-11-26",
+	);
+	assert.deepEqual(changed.tecnicos, [queueTechnician]);
+	assert.equal(changed.status, "aguardando_agendamento");
+	assert.equal(changed.hora_inicio_programado, "00:00:00");
+	assert.equal(changed.hora_termino_programado, "00:01:00");
+	assert.equal(changed.duracao, "00:59:00");
+	assert.equal(changed.agendamento_ordem_servico, null);
+});
+
+test("período automático aceita o mês atual e limita a 367 dias", () => {
+	assert.deepEqual(__testables.parseScanRange({ startDate: "2026-11-01", endDate: "2026-11-26" }), { startDate: "2026-11-01", endDate: "2026-11-26" });
+	assert.throws(() => __testables.parseScanRange({ startDate: "2025-01-01", endDate: "2026-11-26" }), /máximo/);
+});
+
 async function operationResult(orderResponses, configOverride = config) {
 	const originalQuery = db.query;
 	const originalRequest = hubsoft.automationRequest;
@@ -74,7 +95,7 @@ async function operationResult(orderResponses, configOverride = config) {
 		return { ordem_servico: response };
 	};
 	try {
-		await __testables.processOperation({ id: "op-1", client_code: "001", service_order_id: "7", target_type_id: 99 }, {}, [{ company_key: "DEFAULT", ...configOverride }], { tipos_ordem_servico: [{ id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" }] });
+		await __testables.processOperation({ id: "op-1", client_code: "001", service_order_id: "7", target_type_id: 99 }, {}, [{ company_key: "DEFAULT", ...configOverride }], { tipos_ordem_servico: [{ id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" }], tecnicos: [{ id: 694, name: "FILA" }] });
 		return updates.at(-1)?.params?.[1];
 	} finally {
 		db.query = originalQuery;
@@ -83,7 +104,7 @@ async function operationResult(orderResponses, configOverride = config) {
 }
 
 const openOrder = { id_ordem_servico: 7, codigo_cliente: "001", id_tipo_ordem_servico: 12, tipo_ordem_servico: { id_tipo_ordem_servico: 12, descricao: "Retirada" }, status: "pendente" };
-const changedOrder = { ...openOrder, id_tipo_ordem_servico: 99, tipo_ordem_servico: { id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" } };
+const changedOrder = { ...openOrder, id_tipo_ordem_servico: 99, tipo_ordem_servico: { id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" }, status: "aguardando_agendamento", tecnicos: [{ id: 694, name: "FILA" }], hora_inicio_programado: "00:00:00", hora_termino_programado: "00:01:00", duracao: "00:59:00", agendamento_ordem_servico: null };
 
 test("confirma sucesso somente após nova leitura do HubSoft", async () => { assert.equal(await operationResult([openOrder, {}, changedOrder]), "SUCCESS"); });
 test("resposta PUT sem confirmação é registrada como erro", async () => { assert.equal(await operationResult([openOrder, {}, openOrder]), "ERROR"); });
