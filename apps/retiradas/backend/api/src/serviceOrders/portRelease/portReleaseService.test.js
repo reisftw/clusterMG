@@ -71,6 +71,16 @@ test("normalização operacional define FILA, horários, duração e remove agen
 	assert.equal(changed.hora_termino_programado, "00:01:00");
 	assert.equal(changed.duracao, "00:59:00");
 	assert.equal(changed.agendamento_ordem_servico, null);
+	assert.deepEqual(changed.disponibilidade.map((item) => item.id_periodo_dia), [4, 5]);
+	assert.equal(changed.disponibilidade_str, "Manhã, Tarde");
+});
+
+test("normalização operacional preserva disponibilidade já informada", () => {
+	const availability = [{ id_periodo_dia: 6, descricao: "Noite" }];
+	const changed = __testables.applyOperationalTarget(
+		{ disponibilidade: availability }, { id: 99 }, { id: 7 }, "2026-11-26",
+	);
+	assert.deepEqual(changed.disponibilidade, availability);
 });
 
 test("período automático aceita o mês atual e limita a 367 dias", () => {

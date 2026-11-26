@@ -159,6 +159,13 @@ function findQueueTechnician(metadata = {}) {
 
 function applyOperationalTarget(order, target, queueTechnician, day = saoPauloDay()) {
 	const updated = applyTargetType(order, target);
+	if (!Array.isArray(updated.disponibilidade) || updated.disponibilidade.length === 0) {
+		updated.disponibilidade = [
+			{ id_periodo_dia: 4, descricao: "Manhã", prefixo: "manha", hora_inicio: "06:00:00", hora_fim: "11:59:59" },
+			{ id_periodo_dia: 5, descricao: "Tarde", prefixo: "tarde", hora_inicio: "12:00:00", hora_fim: "17:59:59" },
+		];
+		updated.disponibilidade_str = "Manhã, Tarde";
+	}
 	updated.tecnicos = [queueTechnician];
 	updated.ordem_servico_tecnico = [];
 	updated.agenda = null;
@@ -758,7 +765,11 @@ async function processOperation(row, session, configs, metadata) {
 		const updated = applyOperationalTarget(current, target, queueTechnician);
 		let putError = null;
 		try {
-			await hubsoftSyncProfiles.automationRequest(session, `/api/v1/ordem_servico/${encodeURIComponent(row.service_order_id)}`, { method: "PUT", body: updated });
+			const response = await hubsoftSyncProfiles.automationRequest(session, `/api/v1/ordem_servico/${encodeURIComponent(row.service_order_id)}`, { method: "PUT", body: updated });
+			if (normalizeStatus(response?.status) === "error") {
+				const details = Array.isArray(response?.errors) ? response.errors.join(" ") : "";
+				throw new Error(clean(details || response?.msg || "O HubSoft recusou a alteração."));
+			}
 		} catch (error) {
 			putError = error;
 		}
