@@ -4,6 +4,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 import { useLayoutMode } from "../../context/LayoutModeContext";
 import { ROLES } from "../../constants/roles";
+import { getAppClientContext } from "../../services/vpsApiClient";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
 import WelcomeModal from "../../modules/auth/components/WelcomeModal";
 import RetorninhoAssistant from "../../modules/serviceOrders/requests/components/RetorninhoAssistant";
@@ -88,6 +89,7 @@ const SIDEBAR_COLLAPSED_KEY = "retiradas-sidebar-collapsed";
 
 const PageWrapper = ({ children }) => {
 	const { pathname } = useLocation();
+	const isAndroidApp = getAppClientContext().mode === "android";
 	const title = PAGE_TITLES[pathname] ?? "Gestão Retiradas";
 	const { currentUser, trocarSenhaObrigatorio } = useAuthContext();
 	const isTechnician =
@@ -244,14 +246,14 @@ const PageWrapper = ({ children }) => {
 					setWelcomeClosedForUser(currentWelcomeUserKey);
 				}}
 			/>
-			{pathname !== ROUTES.APP && !trocarSenhaObrigatorio && !showWelcomeModal ? (
+			{isAndroidApp && pathname !== ROUTES.APP && !trocarSenhaObrigatorio && !showWelcomeModal ? (
 				<>
 					<TechnicianPushPermissionPrompt />
 					{isTechnician ? <NativeLocationEnrollment /> : null}
 				</>
 			) : null}
-			<TechnicianLocationPresence />
-			<RetorninhoAssistant />
+			{isAndroidApp ? <TechnicianLocationPresence /> : null}
+			{isAndroidApp ? <RetorninhoAssistant /> : null}
 			<ViewportDiagnostics />
 		</div>
 	);
