@@ -13,6 +13,9 @@ export const searchPortReleaseOrders = (body) => requestVpsApi("/service-orders/
 export const getPortReleaseSearch = (id, params) => requestVpsApi(`/service-orders/port-release/search/${encodeURIComponent(id)}${query(params)}`);
 export const createPortReleaseBatch = (body) => requestVpsApi("/service-orders/port-release/batches", { method: "POST", body: JSON.stringify(body) });
 export const getPortReleaseBatch = (id) => requestVpsApi(`/service-orders/port-release/batches/${encodeURIComponent(id)}`);
+export const startPortReleaseScan = (body) => requestVpsApi("/service-orders/port-release/scans", { method: "POST", body: JSON.stringify(body) });
+export const getPortReleaseScan = (id) => requestVpsApi(`/service-orders/port-release/scans/${encodeURIComponent(id)}`);
+export const listPortReleaseScans = (params) => requestVpsApi(`/service-orders/port-release/scans${query(params)}`);
 export const retryPortReleaseOperation = (id) => requestVpsApi(`/service-orders/port-release/operations/${encodeURIComponent(id)}/retry`, { method: "POST" });
 export const listPortReleaseHistory = (params) => requestVpsApi(`/service-orders/port-release/history${query(params)}`);
 export const getPortReleaseStats = (params) => requestVpsApi(`/service-orders/port-release/stats${query(params)}`);

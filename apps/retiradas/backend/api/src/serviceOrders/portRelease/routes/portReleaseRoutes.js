@@ -28,6 +28,19 @@ function createPortReleaseRouter({ requireAnyPermission, requireAuthenticated, r
 	router.post("/batches", requireAuthenticated, requireCsrfToken, allow("execute"), async (req, res, next) => {
 		try { res.status(202).json(await service.createBatch(req.body || {}, req.user || {})); } catch (error) { next(error); }
 	});
+	router.post("/scans", requireAuthenticated, requireCsrfToken, allow("execute"), async (req, res, next) => {
+		try { res.status(202).json(await service.startScan(req.body || {}, req.user || {})); } catch (error) { next(error); }
+	});
+	router.get("/scans", requireAuthenticated, allow("view"), async (req, res, next) => {
+		try { res.json({ items: await service.listScans(req.query || {}) }); } catch (error) { next(error); }
+	});
+	router.get("/scans/:id", requireAuthenticated, allow("view"), async (req, res, next) => {
+		try {
+			const scan = await service.getScan(req.params.id);
+			if (!scan) return res.status(404).json({ error: "Verificação não encontrada." });
+			res.json(scan);
+		} catch (error) { next(error); }
+	});
 	router.get("/batches/:id", requireAuthenticated, allow("view"), async (req, res, next) => {
 		try {
 			const batch = await service.getBatch(req.params.id);

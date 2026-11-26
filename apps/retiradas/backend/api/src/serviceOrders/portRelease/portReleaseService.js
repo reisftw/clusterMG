@@ -18,7 +18,10 @@ const REASONS = new Set([
 ]);
 const queue = [];
 const queued = new Set();
+const scanQueue = [];
+const queuedScans = new Set();
 let workers = 0;
+let scanWorkerRunning = false;
 let initialized = false;
 
 function clean(value) {
@@ -97,6 +100,27 @@ function saoPauloDay() {
 	}).format(new Date());
 }
 
+function currentMonthRange() {
+	const endDate = saoPauloDay();
+	return { startDate: `${endDate.slice(0, 7)}-01`, endDate };
+}
+
+function parseScanRange(input = {}) {
+	const defaults = currentMonthRange();
+	const startDate = clean(input.startDate || input.start_date || defaults.startDate);
+	const endDate = clean(input.endDate || input.end_date || defaults.endDate);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+		throw Object.assign(new Error("Informe um período válido."), { statusCode: 422 });
+	}
+	const start = new Date(`${startDate}T12:00:00Z`);
+	const end = new Date(`${endDate}T12:00:00Z`);
+	const days = Math.round((end - start) / 86_400_000);
+	if (!Number.isFinite(days) || days < 0 || days > 366 || endDate > saoPauloDay()) {
+		throw Object.assign(new Error("O período deve terminar hoje ou antes e ter no máximo 367 dias."), { statusCode: 422 });
+	}
+	return { startDate, endDate };
+}
+
 function evidence(order = {}) {
 	return {
 		serviceOrderId: orderId(order),
@@ -105,6 +129,11 @@ function evidence(order = {}) {
 		typeId: typeId(order),
 		typeName: typeName(order),
 		status: normalizeStatus(order.status_ordem_servico || order.status),
+		technicians: (order.tecnicos || []).map((item) => clean(item.name || item.nome)).filter(Boolean),
+		startTime: clean(order.hora_inicio_programado),
+		endTime: clean(order.hora_termino_programado),
+		duration: clean(order.duracao),
+		scheduled: Boolean(order.agendamento_ordem_servico?.id_agendamento_ordem_servico),
 	};
 }
 
@@ -122,6 +151,38 @@ function applyTargetType(order, target) {
 	updated.id_tipo_ordem_servico = Number(target.id_tipo_ordem_servico || target.id);
 	updated.tipo_ordem_servico = target;
 	return updated;
+}
+
+function findQueueTechnician(metadata = {}) {
+	return (metadata.tecnicos || []).find((item) => normalizeStatus(item.name || item.nome || item.display) === "fila") || null;
+}
+
+function applyOperationalTarget(order, target, queueTechnician, day = saoPauloDay()) {
+	const updated = applyTargetType(order, target);
+	updated.tecnicos = [queueTechnician];
+	updated.ordem_servico_tecnico = [];
+	updated.agenda = null;
+	updated.agendamento_ordem_servico = null;
+	updated.id_agenda_ordem_servico = null;
+	updated.tipo_agendamento = "manual";
+	updated.status = "aguardando_agendamento";
+	updated.data_inicio_programado = day;
+	updated.hora_inicio_programado = "00:00:00";
+	updated.data_termino_programado = day;
+	updated.hora_termino_programado = "00:01:00";
+	updated.duracao = "00:59:00";
+	return updated;
+}
+
+function hasOperationalTarget(order, targetId, queueTechnician) {
+	const technicianIds = (order.tecnicos || []).map((item) => Number(item.id || item.id_usuario)).filter(Boolean);
+	return typeId(order) === targetId &&
+		normalizeStatus(order.status_ordem_servico || order.status) === "aguardando_agendamento" &&
+		technicianIds.length === 1 && technicianIds[0] === Number(queueTechnician?.id || queueTechnician?.id_usuario) &&
+		clean(order.hora_inicio_programado).startsWith("00:00") &&
+		clean(order.hora_termino_programado).startsWith("00:01") &&
+		clean(order.duracao) === "00:59:00" &&
+		!order.agendamento_ordem_servico?.id_agendamento_ordem_servico;
 }
 
 function parseCodes(input, maximum = 500) {
@@ -268,6 +329,221 @@ async function queryDay(session, day, types, statuses) {
 	return rows;
 }
 
+function attendanceClientCode(item = {}) {
+	return digits(item.cliente_servico?.cliente?.codigo_cliente || item.codigo_cliente);
+}
+
+async function queryFinalizedAttendances(session, scan, metadata) {
+	const resolved = (metadata.status_atendimento || []).filter((item) =>
+		normalizeStatus(item.prefixo || item.descricao).startsWith("resolvido"));
+	if (!resolved.length) throw new Error("O HubSoft não retornou o status de atendimento resolvido.");
+	const customers = new Map();
+	let page = 1;
+	let lastPage = 1;
+	let scanned = 0;
+	do {
+		const payload = await hubsoftSyncProfiles.automationRequest(
+			session,
+			`/api/v1/atendimento/consultar/paginado/1000?page=${page}`,
+			{
+				method: "POST",
+				body: {
+					data_inicio: scan.start_date,
+					data_fim: scan.end_date,
+					tipo_data: "data_fechamento",
+					order_by: "data_fechamento",
+					order_by_key: "DESC",
+					status_atendimento: resolved,
+					pagina: page,
+					itens_por_pagina: 1000,
+				},
+			},
+		);
+		const pager = payload?.atendimentos || {};
+		const rows = Array.isArray(pager.data) ? pager.data : [];
+		for (const item of rows) {
+			const code = attendanceClientCode(item);
+			if (!code || !item.data_fechamento) continue;
+			if (!customers.has(code)) customers.set(code, {
+				attendanceId: clean(item.id_atendimento),
+				closedAt: item.data_fechamento,
+			});
+		}
+		scanned += rows.length;
+		lastPage = Number(pager.last_page || 1);
+		await db.query(
+			"update service_order_port_release_scans set attendances_scanned=$2, phase=$3 where id=$1",
+			[scan.id, scanned, `ATENDIMENTOS ${page}/${lastPage}`],
+		);
+		page += 1;
+	} while (page <= lastPage);
+	return customers;
+}
+
+async function queryOpenOrders(session, configs, metadata, scan) {
+	const allTypeIds = new Set(configs.flatMap(configuredTypeIds).concat(
+		configs.map((item) => Number(item.target_type?.id)).filter(Boolean),
+	));
+	const types = (metadata.tipos_ordem_servico || []).filter((item) =>
+		allTypeIds.has(Number(item.id_tipo_ordem_servico || item.id)));
+	const statuses = [...new Set(configs.flatMap((item) => item.open_statuses || []))];
+	const rows = [];
+	let page = 1;
+	let lastPage = 1;
+	const startDate = clean(process.env.PORT_RELEASE_ORDER_LOOKBACK_START || "2020-01-01");
+	do {
+		const payload = await hubsoftSyncProfiles.automationRequest(
+			session,
+			`/api/v1/ordem_servico/consultar/paginado/1000?page=${page}`,
+			{
+				method: "POST",
+				body: {
+					data_inicio: `${startDate}T00:00:00.000-03:00`,
+					data_fim: `${saoPauloDay()}T23:59:59.999-03:00`,
+					tipo_data: "data_cadastro",
+					status_ordem_servico: statuses,
+					tipo_ordem_servicos: types,
+					pagina: page,
+					itens_por_pagina: 1000,
+				},
+			},
+		);
+		const current = rowsOf(payload);
+		rows.push(...current);
+		lastPage = paginationOf(payload, current).lastPage;
+		await db.query(
+			"update service_order_port_release_scans set phase=$2 where id=$1",
+			[scan.id, `ORDENS ABERTAS ${page}/${lastPage}`],
+		);
+		page += 1;
+	} while (page <= lastPage);
+	return rows;
+}
+
+async function createAutomaticBatch(scan, matches, configs) {
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const batch = (await client.query(
+			`insert into service_order_port_release_batches
+			 (scan_id, total, reason, note, requested_by, requested_by_name)
+			 values ($1, 0, 'Correção operacional', $2, $3, $4) returning *`,
+			[scan.id, `Atendimentos finalizados de ${scan.start_date} a ${scan.end_date}.`, scan.requested_by, scan.requested_by_name],
+		)).rows[0];
+		let inserted = 0;
+		for (const item of matches) {
+			const config = configFor(configs, item.order);
+			if (!config?.target_type?.id) continue;
+			const result = await client.query(
+				`insert into service_order_port_release_operations
+				 (batch_id, client_code, client_name, service_order_id, service_order_number, company_key, company_name,
+				 source_type_id, source_type_name, target_type_id, target_type_name, reason, note, requested_by, requested_by_name)
+				 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Correção operacional',$12,$13,$14)
+				 on conflict do nothing returning id`,
+				[batch.id, clientCode(item.order), clientName(item.order), orderId(item.order), orderNumber(item.order),
+					company(item.order).key, company(item.order).name, typeId(item.order), typeName(item.order),
+					Number(config.target_type.id), clean(config.target_type.name),
+					`Atendimento ${item.attendance.attendanceId} finalizado em ${item.attendance.closedAt}.`,
+					scan.requested_by, scan.requested_by_name],
+			);
+			inserted += result.rowCount;
+		}
+		await client.query("update service_order_port_release_batches set total=$2 where id=$1", [batch.id, inserted]);
+		await client.query(
+			`update service_order_port_release_scans set status=$2, phase=$3, customers_matched=$4,
+			 orders_found=$5, completed_at=case when $6=0 then now() else completed_at end where id=$1`,
+			[scan.id, inserted ? "PROCESSING" : "COMPLETE", inserted ? "PROCESSANDO ORDENS" : "CONCLUÍDO",
+				new Set(matches.map((item) => clientCode(item.order))).size, matches.length, inserted],
+		);
+		await client.query("commit");
+		if (inserted) enqueue(batch.id);
+		return { ...batch, total: inserted };
+	} catch (error) {
+		await client.query("rollback");
+		throw error;
+	} finally {
+		client.release();
+	}
+}
+
+async function runScan(id) {
+	const scan = (await db.query(
+		"update service_order_port_release_scans set status='DISCOVERING', phase='ATENDIMENTOS', started_at=coalesce(started_at,now()), error_message=null where id=$1 returning *",
+		[id],
+	)).rows[0];
+	if (!scan) return;
+	try {
+		const configs = await getConfigs();
+		if (!configs.length) throw new Error("Configure os tipos do HubSoft antes de iniciar a verificação.");
+		const session = await hubsoftSyncProfiles.createAutomationSession();
+		const [attendanceMetadata, orderMetadata] = await Promise.all([
+			hubsoftSyncProfiles.automationRequest(session, "/api/v1/atendimento/create"),
+			hubsoftSyncProfiles.automationRequest(session, "/api/v1/ordem_servico/create"),
+		]);
+		const customers = await queryFinalizedAttendances(session, scan, attendanceMetadata);
+		const orders = await queryOpenOrders(session, configs, orderMetadata, scan);
+		const matches = orders
+			.filter((order) => customers.has(clientCode(order)))
+			.filter((order) => ["ELIGIBLE", "ALREADY_CLASSIFIED"].includes(classifyOrder(order, configFor(configs, order))))
+			.map((order) => ({ order, attendance: customers.get(clientCode(order)) }));
+		await createAutomaticBatch(scan, matches, configs);
+	} catch (error) {
+		await db.query(
+			"update service_order_port_release_scans set status='FAILED', phase='ERRO', error_message=$2, completed_at=now() where id=$1",
+			[id, clean(error.message || error)],
+		);
+	}
+}
+
+function enqueueScan(id) {
+	if (queuedScans.has(id)) return;
+	queuedScans.add(id);
+	scanQueue.push(id);
+	setImmediate(() => drainScans().catch((error) => console.error("[port-release] scan queue failed", { error: clean(error.message || error) })));
+}
+
+async function drainScans() {
+	if (scanWorkerRunning || !scanQueue.length) return;
+	scanWorkerRunning = true;
+	const id = scanQueue.shift();
+	try {
+		await runScan(id);
+	} finally {
+		queuedScans.delete(id);
+		scanWorkerRunning = false;
+		if (scanQueue.length) setImmediate(() => drainScans());
+	}
+}
+
+async function startScan(input = {}, user = {}) {
+	const range = parseScanRange(input);
+	const owner = actor(user);
+	try {
+		const scan = (await db.query(
+			`insert into service_order_port_release_scans
+			 (start_date, end_date, requested_by, requested_by_name)
+			 values ($1,$2,$3,$4) returning *`,
+			[range.startDate, range.endDate, owner.id, owner.name],
+		)).rows[0];
+		enqueueScan(scan.id);
+		return scan;
+	} catch (error) {
+		if (error.code === "23505") {
+			throw Object.assign(new Error("Já existe uma verificação automática em andamento."), { statusCode: 409 });
+		}
+		throw error;
+	}
+}
+
+async function getScan(id) {
+	return (await db.query("select * from service_order_port_release_scans where id=$1", [id])).rows[0] || null;
+}
+
+async function listScans(input = {}) {
+	const limit = Math.min(Math.max(Number(input.limit || 12), 1), 50);
+	return (await db.query("select * from service_order_port_release_scans order by created_at desc limit $1", [limit])).rows;
+}
+
 async function search(input = {}, user = {}) {
 	const configs = await getConfigs();
 	if (!configs.length) {
@@ -411,13 +687,26 @@ async function processOperation(row, session, configs, metadata) {
 		const config = configFor(configs, current);
 		const before = evidence(current);
 		const targetId = Number(config?.target_type?.id || row.target_type_id);
-		if (typeId(current) === targetId) return finishOperation(row.id, "SKIPPED", before, before, "A O.S já possui o tipo correto.");
-		if (!config || !config.open_statuses.includes(normalizeStatus(current.status_ordem_servico || current.status)) || !configuredTypeIds(config).includes(typeId(current))) {
+		const queueTechnician = findQueueTechnician(metadata);
+		if (!queueTechnician) throw new Error("O técnico FILA não está disponível no catálogo atual do HubSoft.");
+		if (hasOperationalTarget(current, targetId, queueTechnician)) {
+			return finishOperation(row.id, "SKIPPED", before, before, "A O.S já está normalizada para Liberação de Portas.");
+		}
+		const allowedTypeIds = configuredTypeIds(config).concat(targetId);
+		if (!config || !config.open_statuses.includes(normalizeStatus(current.status_ordem_servico || current.status)) || !allowedTypeIds.includes(typeId(current))) {
 			return finishOperation(row.id, "SKIPPED", before, before, "A O.S deixou de ser elegível antes da alteração.");
 		}
 		const target = (metadata?.tipos_ordem_servico || []).find((item) => Number(item.id_tipo_ordem_servico || item.id) === targetId);
 		if (!target) throw new Error("O tipo de destino configurado não está disponível no catálogo atual do HubSoft.");
-		const updated = applyTargetType(current, target);
+		const appointmentId = clean(current.agendamento_ordem_servico?.id_agendamento_ordem_servico);
+		if (appointmentId) {
+			await hubsoftSyncProfiles.automationRequest(
+				session,
+				`/api/v1/configuracao/geral/agenda_ordem_servico/cancelar_agendamento/${encodeURIComponent(appointmentId)}`,
+			);
+			current = orderPayload(await hubsoftSyncProfiles.automationRequest(session, `/api/v1/ordem_servico/${encodeURIComponent(row.service_order_id)}`)) || current;
+		}
+		const updated = applyOperationalTarget(current, target, queueTechnician);
 		let putError = null;
 		try {
 			await hubsoftSyncProfiles.automationRequest(session, `/api/v1/ordem_servico/${encodeURIComponent(row.service_order_id)}`, { method: "PUT", body: updated });
@@ -430,9 +719,9 @@ async function processOperation(row, session, configs, metadata) {
 			return finishOperation(row.id, "INDETERMINATE", before, null, "Não foi possível confirmar o resultado no HubSoft.");
 		}
 		const after = evidence(current || {});
-		if (typeId(current) === targetId) return finishOperation(row.id, "SUCCESS", before, after, "", orderId(current));
+		if (hasOperationalTarget(current, targetId, queueTechnician)) return finishOperation(row.id, "SUCCESS", before, after, "", orderId(current));
 		if (putError) throw putError;
-		return finishOperation(row.id, "ERROR", before, after, "O HubSoft respondeu, mas não confirmou a mudança do tipo.");
+		return finishOperation(row.id, "ERROR", before, after, "O HubSoft respondeu, mas não confirmou tipo, FILA, status, horários e duração.");
 	} catch (error) {
 		return finishOperation(row.id, "ERROR", null, null, clean(error.message || error));
 	}
@@ -468,8 +757,15 @@ async function runBatch(id) {
 		 count(*) filter (where status='INDETERMINATE')::int indeterminate from service_order_port_release_operations where batch_id=$1`, [id],
 	)).rows[0];
 	const final = counts.failed || counts.indeterminate ? (counts.succeeded || counts.skipped ? "PARTIAL" : "FAILED") : "COMPLETE";
-	await db.query(`update service_order_port_release_batches set status=$2, processed=$3, succeeded=$4, skipped=$5, failed=$6, indeterminate=$7, completed_at=now() where id=$1`,
-		[id, final, counts.processed, counts.succeeded, counts.skipped, counts.failed, counts.indeterminate]);
+	const batch = (await db.query(`update service_order_port_release_batches set status=$2, processed=$3, succeeded=$4, skipped=$5, failed=$6, indeterminate=$7, completed_at=now() where id=$1
+		 returning scan_id`, [id, final, counts.processed, counts.succeeded, counts.skipped, counts.failed, counts.indeterminate])).rows[0];
+	if (batch?.scan_id) {
+		await db.query(
+			`update service_order_port_release_scans set status=$2, phase='CONCLUÍDO', processed=$3, succeeded=$4,
+			 skipped=$5, failed=$6, indeterminate=$7, completed_at=now() where id=$1`,
+			[batch.scan_id, final, counts.processed, counts.succeeded, counts.skipped, counts.failed, counts.indeterminate],
+		);
+	}
 }
 
 function enqueue(id) {
@@ -493,6 +789,12 @@ async function initialize() {
 		);
 		const queuedRows = await db.query("select id from service_order_port_release_batches where status='QUEUED' order by created_at");
 		for (const row of [...result.rows, ...queuedRows.rows]) enqueue(row.id);
+		const scans = await db.query(
+			`update service_order_port_release_scans set status='QUEUED', phase='RETOMANDO'
+			 where status in ('DISCOVERING') returning id`,
+		);
+		const queuedScanRows = await db.query("select id from service_order_port_release_scans where status='QUEUED' order by created_at");
+		for (const row of [...scans.rows, ...queuedScanRows.rows]) enqueueScan(row.id);
 	} catch (error) {
 		initialized = false;
 		throw error;
@@ -627,5 +929,5 @@ async function exportRows(query = {}, format = "csv") {
 	return { content: `\ufeff${[headers, ...data].map((line) => line.map(quote).join(";")).join("\n")}`, contentType: "text/csv; charset=utf-8", filename: "liberacao-portas.csv" };
 }
 
-module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getSearch, initialize, listHistory, parseCodes, retryOperation, saveConfig, search, stats,
-	__testables: { applyTargetType, classifyOrder, clientCode, company, evidence, normalizeStatus, orderId, paginationOf, processOperation, typeId } };
+module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getScan, getSearch, initialize, listHistory, listScans, parseCodes, retryOperation, saveConfig, search, startScan, stats,
+	__testables: { applyOperationalTarget, applyTargetType, classifyOrder, clientCode, company, evidence, findQueueTechnician, hasOperationalTarget, normalizeStatus, orderId, paginationOf, parseScanRange, processOperation, typeId } };
