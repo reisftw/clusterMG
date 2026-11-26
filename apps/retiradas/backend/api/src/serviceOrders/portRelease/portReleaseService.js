@@ -333,15 +333,35 @@ function attendanceClientCode(item = {}) {
 	return digits(item.cliente_servico?.cliente?.codigo_cliente || item.codigo_cliente);
 }
 
+function findStoreDeliveryAttendanceType(metadata = {}) {
+	return (metadata.tipos_atendimento || []).find((item) =>
+		normalizeStatus(item.descricao) === "entrega_de_equipamento_em_loja") || null;
+}
+
+function isResolvedStoreDeliveryAttendance(item = {}, typeIdValue) {
+	return Number(item.id_tipo_atendimento || item.tipo_atendimento?.id_tipo_atendimento) === Number(typeIdValue) &&
+		normalizeStatus(item.status?.prefixo || item.status?.descricao) === "resolvido";
+}
+
+async function assertScanActive(id) {
+	const row = (await db.query("select status from service_order_port_release_scans where id=$1", [id])).rows[0];
+	if (!row || !["QUEUED", "DISCOVERING", "PROCESSING"].includes(row.status)) {
+		throw Object.assign(new Error("Verificação interrompida pelo operador."), { code: "SCAN_STOPPED" });
+	}
+}
+
 async function queryFinalizedAttendances(session, scan, metadata) {
 	const resolved = (metadata.status_atendimento || []).filter((item) =>
-		normalizeStatus(item.prefixo || item.descricao).startsWith("resolvido"));
+		normalizeStatus(item.prefixo || item.descricao) === "resolvido");
 	if (!resolved.length) throw new Error("O HubSoft não retornou o status de atendimento resolvido.");
+	const storeDeliveryType = findStoreDeliveryAttendanceType(metadata);
+	if (!storeDeliveryType) throw new Error("O HubSoft não retornou o tipo ENTREGA DE EQUIPAMENTO EM LOJA.");
 	const customers = new Map();
 	let page = 1;
 	let lastPage = 1;
 	let scanned = 0;
 	do {
+		await assertScanActive(scan.id);
 		const payload = await hubsoftSyncProfiles.automationRequest(
 			session,
 			`/api/v1/atendimento/consultar/paginado/1000?page=${page}`,
@@ -354,13 +374,15 @@ async function queryFinalizedAttendances(session, scan, metadata) {
 					order_by: "data_fechamento",
 					order_by_key: "DESC",
 					status_atendimento: resolved,
+					tipo_atendimento: [storeDeliveryType],
 					pagina: page,
 					itens_por_pagina: 1000,
 				},
 			},
 		);
 		const pager = payload?.atendimentos || {};
-		const rows = Array.isArray(pager.data) ? pager.data : [];
+		const rows = (Array.isArray(pager.data) ? pager.data : []).filter((item) =>
+			isResolvedStoreDeliveryAttendance(item, storeDeliveryType.id_tipo_atendimento));
 		for (const item of rows) {
 			const code = attendanceClientCode(item);
 			if (!code || !item.data_fechamento) continue;
@@ -381,9 +403,7 @@ async function queryFinalizedAttendances(session, scan, metadata) {
 }
 
 async function queryOpenOrders(session, configs, metadata, scan) {
-	const allTypeIds = new Set(configs.flatMap(configuredTypeIds).concat(
-		configs.map((item) => Number(item.target_type?.id)).filter(Boolean),
-	));
+	const allTypeIds = new Set(configs.flatMap(configuredTypeIds));
 	const types = (metadata.tipos_ordem_servico || []).filter((item) =>
 		allTypeIds.has(Number(item.id_tipo_ordem_servico || item.id)));
 	const statuses = [...new Set(configs.flatMap((item) => item.open_statuses || []))];
@@ -392,6 +412,7 @@ async function queryOpenOrders(session, configs, metadata, scan) {
 	let lastPage = 1;
 	const startDate = clean(process.env.PORT_RELEASE_ORDER_LOOKBACK_START || "2020-01-01");
 	do {
+		await assertScanActive(scan.id);
 		const payload = await hubsoftSyncProfiles.automationRequest(
 			session,
 			`/api/v1/ordem_servico/consultar/paginado/1000?page=${page}`,
@@ -468,7 +489,7 @@ async function createAutomaticBatch(scan, matches, configs) {
 
 async function runScan(id) {
 	const scan = (await db.query(
-		"update service_order_port_release_scans set status='DISCOVERING', phase='ATENDIMENTOS', started_at=coalesce(started_at,now()), error_message=null where id=$1 returning *",
+		"update service_order_port_release_scans set status='DISCOVERING', phase='ATENDIMENTOS', started_at=coalesce(started_at,now()), error_message=null where id=$1 and status='QUEUED' returning *",
 		[id],
 	)).rows[0];
 	if (!scan) return;
@@ -482,14 +503,15 @@ async function runScan(id) {
 		]);
 		const customers = await queryFinalizedAttendances(session, scan, attendanceMetadata);
 		const orders = await queryOpenOrders(session, configs, orderMetadata, scan);
+		await assertScanActive(id);
 		const matches = orders
 			.filter((order) => customers.has(clientCode(order)))
-			.filter((order) => ["ELIGIBLE", "ALREADY_CLASSIFIED"].includes(classifyOrder(order, configFor(configs, order))))
+			.filter((order) => classifyOrder(order, configFor(configs, order)) === "ELIGIBLE")
 			.map((order) => ({ order, attendance: customers.get(clientCode(order)) }));
 		await createAutomaticBatch(scan, matches, configs);
 	} catch (error) {
 		await db.query(
-			"update service_order_port_release_scans set status='FAILED', phase='ERRO', error_message=$2, completed_at=now() where id=$1",
+			"update service_order_port_release_scans set status='FAILED', phase='ERRO', error_message=$2, completed_at=now() where id=$1 and phase<>'CANCELADA'",
 			[id, clean(error.message || error)],
 		);
 	}
@@ -542,6 +564,33 @@ async function getScan(id) {
 async function listScans(input = {}) {
 	const limit = Math.min(Math.max(Number(input.limit || 12), 1), 50);
 	return (await db.query("select * from service_order_port_release_scans order by created_at desc limit $1", [limit])).rows;
+}
+
+async function stopScan(id) {
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const scan = (await client.query(
+			`update service_order_port_release_scans set status='FAILED', phase='CANCELADA',
+			 error_message='Verificação interrompida pelo operador.', completed_at=now()
+			 where id=$1 and status in ('QUEUED','DISCOVERING','PROCESSING') returning *`, [id],
+		)).rows[0];
+		if (!scan) throw Object.assign(new Error("A verificação não está em andamento."), { statusCode: 409 });
+		await client.query(
+			`update service_order_port_release_operations set status='ERROR',
+			 error_message='Execução cancelada pelo operador.'
+			 where batch_id in (select id from service_order_port_release_batches where scan_id=$1)
+			 and status in ('QUEUED','RUNNING')`, [id],
+		);
+		await client.query("update service_order_port_release_batches set status='FAILED', completed_at=now() where scan_id=$1 and status in ('QUEUED','RUNNING')", [id]);
+		await client.query("commit");
+		return scan;
+	} catch (error) {
+		await client.query("rollback");
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function search(input = {}, user = {}) {
@@ -742,12 +791,22 @@ async function finishOperation(id, status, before, after, message = "", external
 }
 
 async function runBatch(id) {
-	await db.query("update service_order_port_release_batches set status = 'RUNNING', started_at = coalesce(started_at, now()) where id = $1", [id]);
+	const batchScan = (await db.query(
+		"update service_order_port_release_batches set status='RUNNING', started_at=coalesce(started_at,now()) where id=$1 and status='QUEUED' returning scan_id",
+		[id],
+	)).rows[0];
+	if (!batchScan) return;
 	const configs = await getConfigs();
 	const session = await hubsoftSyncProfiles.createAutomationSession();
 	const metadata = await hubsoftSyncProfiles.automationRequest(session, "/api/v1/ordem_servico/create");
 	const operations = (await db.query("select * from service_order_port_release_operations where batch_id = $1 and status = 'QUEUED' order by requested_at", [id])).rows;
 	for (const operation of operations) {
+		if (batchScan?.scan_id) {
+			try { await assertScanActive(batchScan.scan_id); } catch {
+				await db.query("update service_order_port_release_operations set status='ERROR', error_message='Execução cancelada pelo operador.' where batch_id=$1 and status='QUEUED'", [id]);
+				break;
+			}
+		}
 		// Deliberately sequential: one authenticated HubSoft session must not mutate orders concurrently.
 		await processOperation(operation, session, configs, metadata); // NOSONAR
 	}
@@ -762,7 +821,7 @@ async function runBatch(id) {
 	if (batch?.scan_id) {
 		await db.query(
 			`update service_order_port_release_scans set status=$2, phase='CONCLUÍDO', processed=$3, succeeded=$4,
-			 skipped=$5, failed=$6, indeterminate=$7, completed_at=now() where id=$1`,
+			 skipped=$5, failed=$6, indeterminate=$7, completed_at=now() where id=$1 and status<>'FAILED'`,
 			[batch.scan_id, final, counts.processed, counts.succeeded, counts.skipped, counts.failed, counts.indeterminate],
 		);
 	}
@@ -929,5 +988,5 @@ async function exportRows(query = {}, format = "csv") {
 	return { content: `\ufeff${[headers, ...data].map((line) => line.map(quote).join(";")).join("\n")}`, contentType: "text/csv; charset=utf-8", filename: "liberacao-portas.csv" };
 }
 
-module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getScan, getSearch, initialize, listHistory, listScans, parseCodes, retryOperation, saveConfig, search, startScan, stats,
-	__testables: { applyOperationalTarget, applyTargetType, classifyOrder, clientCode, company, evidence, findQueueTechnician, hasOperationalTarget, normalizeStatus, orderId, paginationOf, parseScanRange, processOperation, typeId } };
+module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getScan, getSearch, initialize, listHistory, listScans, parseCodes, retryOperation, saveConfig, search, startScan, stats, stopScan,
+	__testables: { applyOperationalTarget, applyTargetType, classifyOrder, clientCode, company, evidence, findQueueTechnician, findStoreDeliveryAttendanceType, hasOperationalTarget, isResolvedStoreDeliveryAttendance, normalizeStatus, orderId, paginationOf, parseScanRange, processOperation, typeId } };
