@@ -373,7 +373,7 @@ async function queryFinalizedAttendances(session, scan, metadata) {
 		lastPage = Number(pager.last_page || 1);
 		await db.query(
 			"update service_order_port_release_scans set attendances_scanned=$2, phase=$3 where id=$1",
-			[scan.id, scanned, `ATENDIMENTOS ${page}/${lastPage}`],
+			[scan.id, scanned, `ATENDIMENTOS · PÁGINA ${page} DE ${lastPage}`],
 		);
 		page += 1;
 	} while (page <= lastPage);
