@@ -41,6 +41,9 @@ function createPortReleaseRouter({ requireAnyPermission, requireAuthenticated, r
 			res.json(scan);
 		} catch (error) { next(error); }
 	});
+	router.post("/scans/:id/stop", requireAuthenticated, requireCsrfToken, allow("execute"), async (req, res, next) => {
+		try { res.json(await service.stopScan(req.params.id)); } catch (error) { next(error); }
+	});
 	router.get("/batches/:id", requireAuthenticated, allow("view"), async (req, res, next) => {
 		try {
 			const batch = await service.getBatch(req.params.id);

@@ -1,10 +1,10 @@
-import { AlertTriangle, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, DoorOpen, Download, History, Loader2, Play, RefreshCw, Settings2, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, DoorOpen, Download, History, Loader2, Play, RefreshCw, Settings2, Square, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { hasAnyPermission } from "../../../../constants/roles";
 import { useAuthContext } from "../../../../context/AuthContext";
 import {
 	getPortReleaseCatalog, getPortReleaseConfig, getPortReleaseScan, getPortReleaseStats, listPortReleaseHistory,
-	listPortReleaseScans, portReleaseExportUrl, retryPortReleaseOperation, savePortReleaseConfig, startPortReleaseScan,
+	listPortReleaseScans, portReleaseExportUrl, retryPortReleaseOperation, savePortReleaseConfig, startPortReleaseScan, stopPortReleaseScan,
 } from "../services/portReleaseService";
 
 const ACTIVE_SCAN_STATUSES = ["QUEUED", "DISCOVERING", "PROCESSING"];
@@ -95,6 +95,16 @@ export default function PortReleasePage() {
 		} catch (err) { setError(err.message); } finally { setLoading(false); }
 	}
 
+	async function stopCurrentScan() {
+		if (!scan?.id || !window.confirm("Parar esta varredura? Nenhuma nova O.S. será processada.")) return;
+		setLoading(true); setError("");
+		try {
+			const stopped = await stopPortReleaseScan(scan.id);
+			setScan(stopped); setMessage("Varredura interrompida. Nenhuma nova O.S. será processada.");
+			await loadOverview();
+		} catch (err) { setError(err.message); } finally { setLoading(false); }
+	}
+
 	async function retry(operation) {
 		if (!window.confirm(`Reenviar a O.S. ${operation.serviceOrderNumber || operation.serviceOrderId}?`)) return;
 		setLoading(true); setError(""); setMessage("");
@@ -139,7 +149,7 @@ export default function PortReleasePage() {
 					<button type="button" disabled={!canExecute || loading || (scan && ACTIVE_SCAN_STATUSES.includes(scan.status))} onClick={executeScan} className="inline-flex items-center justify-center gap-2 self-end rounded-lg bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />} Iniciar</button>
 				</div>
 			</section>
-			{scan && <section className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase text-slate-500">Execução atual</p><h2 className="mt-1 font-black">{scanStatusLabel(scan)} · {scan.phase}</h2></div>{ACTIVE_SCAN_STATUSES.includes(scan.status) && <Loader2 className="animate-spin text-blue-600" size={22} />}</div><div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4"><Card title="Atendimentos" value={scan.attendances_scanned || 0} detail="Analisados" /><Card title="Clientes" value={scan.customers_matched || 0} detail="Com O.S. elegível" /><Card title="Ordens" value={scan.orders_found || 0} detail="Encontradas" /><Card title="Concluídas" value={(scan.succeeded || 0) + (scan.skipped || 0)} detail={`${scan.failed || 0} falha(s)`} /></div>{scan.error_message && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{scan.error_message}</p>}</section>}
+			{scan && <section className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase text-slate-500">Execução atual</p><h2 className="mt-1 font-black">{scanStatusLabel(scan)} · {scan.phase}</h2></div>{ACTIVE_SCAN_STATUSES.includes(scan.status) && <div className="flex items-center gap-3"><Loader2 className="animate-spin text-blue-600" size={22} /><button type="button" disabled={loading || !canExecute} onClick={stopCurrentScan} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 font-bold text-red-700 disabled:opacity-50"><Square size={15} fill="currentColor" /> Parar varredura</button></div>}</div><div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4"><Card title="Atendimentos" value={(scan.attendances_scanned || 0).toLocaleString("pt-BR")} detail="Entregas em loja resolvidas" /><Card title="Clientes" value={scan.customers_matched || 0} detail="Com O.S. de retirada aberta" /><Card title="Ordens" value={scan.orders_found || 0} detail="Encontradas" /><Card title="Concluídas" value={(scan.succeeded || 0) + (scan.skipped || 0)} detail={`${scan.failed || 0} falha(s)`} /></div>{scan.error_message && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{scan.error_message}</p>}</section>}
 			{scans.length > 0 && <section className="overflow-hidden rounded-lg border bg-white shadow-sm"><div className="border-b p-4"><h2 className="font-black">Verificações recentes</h2></div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left"><tr>{["Período", "Status", "Atendimentos", "Clientes", "Ordens", "Concluídas", "Falhas", "Iniciada por"].map((item) => <th key={item} className="whitespace-nowrap p-3">{item}</th>)}</tr></thead><tbody>{scans.map((item) => <tr key={item.id} className="border-t"><td className="whitespace-nowrap p-3">{new Date(`${item.start_date}T12:00:00`).toLocaleDateString("pt-BR")} a {new Date(`${item.end_date}T12:00:00`).toLocaleDateString("pt-BR")}</td><td className="p-3 font-bold">{scanStatusLabel(item)}</td><td className="p-3">{item.attendances_scanned}</td><td className="p-3">{item.customers_matched}</td><td className="p-3">{item.orders_found}</td><td className="p-3">{(item.succeeded || 0) + (item.skipped || 0)}</td><td className="p-3">{(item.failed || 0) + (item.indeterminate || 0)}</td><td className="p-3">{item.requested_by_name}</td></tr>)}</tbody></table></div></section>}
 		</>}
 		{tab === "history" && <section className="rounded-lg border bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><h2 className="flex items-center gap-2 font-black"><History size={18} /> Histórico de liberações <span className="text-sm font-medium text-slate-500">({history.pagination?.total || 0})</span></h2>{canExport && <div className="flex gap-2"><a href={portReleaseExportUrl("csv")} className="inline-flex items-center gap-2 rounded border px-3 py-2 font-bold"><Download size={16} /> CSV</a><a href={portReleaseExportUrl("xlsx")} className="inline-flex items-center gap-2 rounded border px-3 py-2 font-bold"><Download size={16} /> XLSX</a></div>}</div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-left"><tr>{["Resultado", "Cliente", "O.S.", "Empresa", "De", "Para", "Responsável", "Data", "Motivo"].map((item) => <th key={item} className="p-3">{item}</th>)}</tr></thead><tbody>{history.items.map((item) => <tr key={item.id} className="border-t"><td className="p-3">{item.status === "SUCCESS" ? <CheckCircle2 className="text-emerald-600" size={18} /> : <XCircle className="text-red-500" size={18} />}</td><td className="p-3"><b>{item.clientName}</b><br />{item.clientCode}</td><td className="p-3">{item.serviceOrderNumber}</td><td className="p-3">{item.companyName}</td><td className="p-3">{item.sourceTypeName}</td><td className="p-3">{item.targetTypeName}</td><td className="p-3">{item.requestedByName}</td><td className="p-3 whitespace-nowrap">{new Date(item.requestedAt).toLocaleString("pt-BR")}</td><td className="p-3">{item.reason}</td></tr>)}</tbody></table></div><Pager pagination={history.pagination} onPage={changeHistoryPage} /></section>}

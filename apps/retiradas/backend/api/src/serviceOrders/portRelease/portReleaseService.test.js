@@ -78,6 +78,17 @@ test("período automático aceita o mês atual e limita a 367 dias", () => {
 	assert.throws(() => __testables.parseScanRange({ startDate: "2025-01-01", endDate: "2026-11-26" }), /máximo/);
 });
 
+test("seleciona somente o tipo ENTREGA DE EQUIPAMENTO EM LOJA", () => {
+	const metadata = { tipos_atendimento: [
+		{ id_tipo_atendimento: 1, descricao: "SUPORTE" },
+		{ id_tipo_atendimento: 826, descricao: " ENTREGA DE EQUIPAMENTO EM LOJA" },
+	] };
+	assert.equal(__testables.findStoreDeliveryAttendanceType(metadata).id_tipo_atendimento, 826);
+	assert.equal(__testables.isResolvedStoreDeliveryAttendance({ id_tipo_atendimento: 826, status: { prefixo: "resolvido" } }, 826), true);
+	assert.equal(__testables.isResolvedStoreDeliveryAttendance({ id_tipo_atendimento: 1, status: { prefixo: "resolvido" } }, 826), false);
+	assert.equal(__testables.isResolvedStoreDeliveryAttendance({ id_tipo_atendimento: 826, status: { prefixo: "pendente" } }, 826), false);
+});
+
 async function operationResult(orderResponses, configOverride = config) {
 	const originalQuery = db.query;
 	const originalRequest = hubsoft.automationRequest;
