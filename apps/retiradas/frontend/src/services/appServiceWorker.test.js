@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
 	confirmPwaUpdate,
 	consumePwaUpdateConfirmation,
@@ -72,5 +74,23 @@ describe("appServiceWorker update flow", () => {
 		const storage = { getItem: vi.fn(() => null), removeItem: vi.fn() };
 		expect(consumePwaUpdateConfirmation(storage)).toBe(false);
 		expect(storage.removeItem).not.toHaveBeenCalled();
+	});
+});
+
+describe("service worker cache boundaries", () => {
+	const source = readFileSync(
+		resolve(process.cwd(), "apps/retiradas/frontend/public/sw.js"),
+		"utf8",
+	);
+
+	it("intercepts only REVO static assets outside navigations", () => {
+		expect(source).toContain('url.pathname.startsWith("/assets/") || APP_SHELL.includes(url.pathname)');
+		expect(source).toContain('const EXCLUDED_APP_PREFIXES = ["/adm", "/liliane"]');
+		expect(source).not.toContain("else if (isSameOrigin) {");
+	});
+
+	it("keeps installing when one optional shell asset fails", () => {
+		expect(source).toContain("Promise.allSettled(");
+		expect(source).not.toContain("cache.addAll(APP_SHELL)");
 	});
 });

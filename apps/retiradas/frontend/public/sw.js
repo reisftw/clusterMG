@@ -1,5 +1,6 @@
-const SW_VERSION = "v34-saldo-mensal-canonico";
+const SW_VERSION = "v35-cache-revo-isolado";
 const CACHE_NAME = `retiradas-pwa-${SW_VERSION}`;
+const EXCLUDED_APP_PREFIXES = ["/adm", "/liliane"];
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
@@ -55,18 +56,22 @@ function parsePushPayload(event) {
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(
-		Promise.all([
-			caches
-				.open(CACHE_NAME)
-				.then((cache) => cache.addAll(APP_SHELL))
-				.catch((error) => {
-					reportSwEvent("INSTALL_FAILURE", {
-						message: String(error?.message || error || "Falha de instalacao"),
-					});
-					throw error;
-				}),
-			reportSwEvent("INSTALLED", { cacheName: CACHE_NAME }),
-		]),
+		caches.open(CACHE_NAME).then(async (cache) => {
+			const results = await Promise.allSettled(
+				APP_SHELL.map((path) => cache.add(path)),
+			);
+			const failedPaths = results
+				.map((result, index) => result.status === "rejected" ? APP_SHELL[index] : null)
+				.filter(Boolean);
+			if (failedPaths.length) {
+				await reportSwEvent("INSTALL_FAILURE", { failedPaths });
+			}
+			await reportSwEvent("INSTALLED", {
+				cacheName: CACHE_NAME,
+				cached: APP_SHELL.length - failedPaths.length,
+				failed: failedPaths.length,
+			});
+		}),
 	);
 });
 
@@ -175,9 +180,18 @@ function handleGetRequest(event) {
 	const isSameOrigin = url.origin === self.location.origin;
 
 	if (isSameOrigin && url.pathname.startsWith("/api/")) return;
+	if (
+		isSameOrigin &&
+		EXCLUDED_APP_PREFIXES.some(
+			(prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`),
+		)
+	) return;
 	if (request.mode === "navigate") {
 		event.respondWith(fetchNavigation(request));
-	} else if (isSameOrigin) {
+	} else if (
+		isSameOrigin &&
+		(url.pathname.startsWith("/assets/") || APP_SHELL.includes(url.pathname))
+	) {
 		event.respondWith(fetchSameOriginAsset(request));
 	}
 }
