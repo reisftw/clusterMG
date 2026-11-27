@@ -42,6 +42,11 @@ const DEFAULT_CONFIG = {
 	autoDailyCheckpointHours: [11, 14, 16, 18, 23],
 	autoMetaEnabled: true,
 	autoMetaTime: "03:00",
+	autoPortReleaseEnabled: true,
+	autoPortReleaseIntervalMinutes: 30,
+	autoPortReleaseLastAttemptAt: "",
+	autoPortReleaseLastRunAt: "",
+	autoPortReleaseLastScanId: "",
 	autoMapMatchEnabled: true,
 	autoMapMatchIntervalMinutes: 60,
 	autoDailyLastRunAt: "",
@@ -125,6 +130,11 @@ function normalizeConfig(config = {}) {
 		].sort((left, right) => left - right),
 		autoMetaEnabled: config.autoMetaEnabled !== false,
 		autoMetaTime: cleanText(config.autoMetaTime || "03:00"),
+		autoPortReleaseEnabled: config.autoPortReleaseEnabled !== false,
+		autoPortReleaseIntervalMinutes: Math.min(
+			Math.max(Number(config.autoPortReleaseIntervalMinutes || 30), 5),
+			24 * 60,
+		),
 		autoMapMatchEnabled: config.autoMapMatchEnabled !== false,
 		autoMapMatchIntervalMinutes: Math.min(
 			Math.max(Number(config.autoMapMatchIntervalMinutes || 60), 15),
