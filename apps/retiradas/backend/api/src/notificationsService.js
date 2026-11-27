@@ -382,9 +382,10 @@ async function listNotifications({
 	unread,
 } = {}) {
 	await syncPendingDocumentNotifications({ user });
+	const normalizedOffset = normalizeOffset(offset);
 	const rawRows = await listRawNotifications({
-		limit: Math.min(normalizeLimit(limit) * 3, 300),
-		offset,
+		limit: normalizedOffset === 0 ? MAX_LIMIT : normalizeLimit(limit) * 3,
+		offset: normalizedOffset,
 	});
 	const items = filterMappedNotifications(rawRows, {
 		user,
@@ -392,7 +393,9 @@ async function listNotifications({
 		severity,
 		unread,
 	}).slice(0, normalizeLimit(limit));
-	const unreadRows = await listRawNotifications({ limit: 300, offset: 0 });
+	const unreadRows = normalizedOffset === 0
+		? rawRows
+		: await listRawNotifications({ limit: MAX_LIMIT, offset: 0 });
 	const unreadCount = filterMappedNotifications(unreadRows, { user }).filter(
 		(item) => !item.read,
 	).length;
@@ -560,23 +563,32 @@ async function listPendingDocumentSubmissionsForUser(user = {}) {
 	return result.rows;
 }
 
-async function createPendingDocumentNotificationForRow(row, user = {}) {
+function pendingDocumentNotificationId(row, user = {}) {
 	const role = userRole(user);
-	let dedupeKey = "";
+	if (role === "admin") return `documentos_pendentes_admin_${row.id}`;
+	if (role === "supervisor") return `documentos_pendentes_supervisor_${row.id}`;
+	if (role === "lider_empresa") return `documentos_pendentes_empresa_${row.id}`;
+	return "";
+}
+
+async function createPendingDocumentNotificationForRow(
+	row,
+	user = {},
+	existingNotificationIds = null,
+) {
+	const role = userRole(user);
+	const dedupeKey = pendingDocumentNotificationId(row, user);
 	let targets = {};
 	let targetPath = "/documentos/pendentes";
 
 	if (role === "admin") {
-		dedupeKey = `documentos_pendentes_admin_${row.id}`;
 		targets = { roles: ["admin"] };
 	} else if (role === "supervisor") {
-		dedupeKey = `documentos_pendentes_supervisor_${row.id}`;
 		targets = {
 			roles: ["supervisor"],
 			regionais: row.regional ? [row.regional] : [],
 		};
 	} else if (role === "lider_empresa") {
-		dedupeKey = `documentos_pendentes_empresa_${row.id}`;
 		targets = {
 			roles: ["lider_empresa"],
 			empresas: row.empresa_id ? [row.empresa_id] : [],
@@ -586,7 +598,11 @@ async function createPendingDocumentNotificationForRow(row, user = {}) {
 		return null;
 	}
 
-	if (await notificationExists(dedupeKey)) return null;
+	if (
+		existingNotificationIds
+			? existingNotificationIds.has(dedupeKey)
+			: await notificationExists(dedupeKey)
+	) return null;
 	return createNotification({
 		type: "documentos_pendentes",
 		title: "Documentos pendentes",
@@ -611,13 +627,23 @@ async function createPendingDocumentNotificationForRow(row, user = {}) {
 async function syncPendingDocumentNotifications({ user } = {}) {
 	try {
 		const rows = await listPendingDocumentSubmissionsForUser(user || {});
+		const dedupeKeys = rows
+			.map((row) => pendingDocumentNotificationId(row, user || {}))
+			.filter(Boolean);
+		const existingNotificationIds = new Set(
+			(await listRawNotificationsByIds(dedupeKeys)).map((row) => row.document_id),
+		);
 		let created = 0;
 		for (const row of rows) {
 			const notification = await createPendingDocumentNotificationForRow(
 				row,
 				user || {},
+				existingNotificationIds,
 			);
-			if (notification) created += 1;
+			if (notification) {
+				created += 1;
+				existingNotificationIds.add(notification.id);
+			}
 		}
 		return created;
 	} catch (error) {

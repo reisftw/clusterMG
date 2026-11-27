@@ -296,6 +296,7 @@ async function recordServiceWorkerEvent(payload = {}, userAgent = "") {
 		"CACHE_FAILURE",
 		"NETWORK_FALLBACK",
 		"UPDATE_FOUND",
+		"UPDATE_READY",
 		"HEARTBEAT",
 	]);
 	const eventType = text(payload.eventType, 60).toUpperCase();
