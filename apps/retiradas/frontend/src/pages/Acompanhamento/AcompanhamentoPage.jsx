@@ -2054,6 +2054,21 @@ function AgendaPanel({ eventos }) {
 	);
 }
 
+function DailyCancellationsPanel({ data }) {
+	const total = Number(data?.total || 0);
+	return (
+		<section className="acomp-panel acomp-cancellations-panel">
+			<div className="acomp-panel-title">
+				<X size={19} />
+				<h2>CANCELADOS DO DIA</h2>
+			</div>
+			<strong className="acomp-cancellations-total">{formatNumber(total)}</strong>
+			<p>{total === 1 ? "cliente cancelado hoje." : "clientes cancelados hoje."}</p>
+			<small>Última atualização: {data?.updatedAt ? formatRealtimeUpdateDate(data.updatedAt) : "aguardando sincronização"}</small>
+		</section>
+	);
+}
+
 function DailyDeliveryPanel({ data }) {
 	const today = data.monthEntries.find(
 		(day) => day.date === data.referenceDateKey,
@@ -2776,6 +2791,7 @@ function AcompanhamentoMainGrid({
 			{sections.agenda ? (
 				<div className="acomp-agenda-stack">
 					<AgendaPanel eventos={dashboard.eventosAgenda} />
+					<DailyCancellationsPanel data={operationalSummary?.dailyCancellations} />
 					<FinesPanel data={diarioBoardData} isChristmas={isChristmas} />
 				</div>
 			) : null}

@@ -739,9 +739,22 @@ async function getClosedCities(date = todaySaoPaulo()) {
 	);
 }
 
+async function getDailyCancellations(date = todaySaoPaulo()) {
+	const result = await db.query(
+		`select count(*)::int as total, max(updated_at) as updated_at
+		   from service_order_cancellation_records
+		  where data_cancelamento = $1::date`,
+		[date],
+	);
+	return {
+		total: number(result.rows[0]?.total),
+		updatedAt: result.rows[0]?.updated_at || null,
+	};
+}
+
 async function loadOperationalSummary(date) {
 	const weekDate = date;
-	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, hourlyEvolution, topRanking, openedCities, closedCities, activeOpenCities, activeOpenRegionals, activeOpenCounts] =
+	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, hourlyEvolution, topRanking, openedCities, closedCities, activeOpenCities, activeOpenRegionals, activeOpenCounts, dailyCancellations] =
 		await Promise.all([
 			getLatestUpdate(),
 			getDailyProduction(date),
@@ -761,6 +774,7 @@ async function loadOperationalSummary(date) {
 			getActiveOpenCities(),
 			getActiveOpenRegionals(),
 			getActiveOpenCounts(),
+			getDailyCancellations(date),
 		]);
 	return {
 		date,
@@ -784,6 +798,7 @@ async function loadOperationalSummary(date) {
 		topActiveOpenRegionals: activeOpenRegionals,
 		activeOpenTotal: activeOpenCounts.total,
 		activeOpenPendingTotal: activeOpenCounts.pending,
+		dailyCancellations,
 		carousel: {
 			intervalSeconds: 60,
 			items: ["dailyProduction", "weeklyProduction"],

@@ -54,6 +54,19 @@ function createServiceOrderCancellationsRouter({
 	});
 
 	router.get(
+		"/sync/automation",
+		requireAuthenticated,
+		requireView,
+		async (_req, res, next) => {
+			try {
+				res.json(await service.getAutomationStatus());
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
 		"/sync/history",
 		requireAuthenticated,
 		requireView,

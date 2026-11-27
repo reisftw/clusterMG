@@ -6130,6 +6130,7 @@ function createApp() {
 	});
 
 	hubsoftSyncProfiles.startScheduler(app, { portReleaseService });
+	serviceOrderCancellationsService.startAutomaticSyncWorker(app);
 
 	app.use((error, req, res, next) => {
 		if (res.headersSent) {

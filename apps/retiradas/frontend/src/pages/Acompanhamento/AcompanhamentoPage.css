@@ -1244,8 +1244,34 @@
 	grid-area: agenda;
 	display: grid;
 	min-height: 0;
-	grid-template-rows: minmax(0, 0.82fr) minmax(92px, 0.98fr);
+	grid-template-rows: minmax(0, 0.78fr) minmax(82px, 0.72fr) minmax(82px, 0.78fr);
 	gap: clamp(6px, 0.5vw, 8px);
+}
+
+.acomp-cancellations-panel {
+	justify-content: center;
+	padding: 8px 12px;
+}
+
+.acomp-cancellations-total {
+	font-size: clamp(24px, 2vw, 38px);
+	line-height: 1;
+}
+
+.acomp-cancellations-panel p,
+.acomp-cancellations-panel small {
+	margin: 0;
+}
+
+.acomp-cancellations-panel small {
+	opacity: 0.72;
+}
+
+.acomp-festive-page.is-christmas .acomp-cancellations-panel {
+	background-color: rgba(0, 77, 60, 0.94);
+	background-image: url("/themes/christmas-2026/02-card-verde.webp");
+	background-position: center;
+	background-size: cover;
 }
 
 .acomp-agenda-panel {
