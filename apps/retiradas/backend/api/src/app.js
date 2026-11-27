@@ -67,6 +67,7 @@ const createNotificationsRouter = require("./notifications/routes/notificationsR
 const createPushNotificationsRouter = require("./pushNotifications/routes/pushNotificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
+const serviceOrderCancellationsService = require("./serviceOrders/cancellations/serviceOrderCancellationsService");
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const createServiceOrderRequestsRouter = require("./serviceOrders/requests/routes/serviceOrderRequestsRoutes");
 const createPortReleaseRouter = require("./serviceOrders/portRelease/routes/portReleaseRoutes");
@@ -6111,6 +6112,7 @@ function createApp() {
 	});
 
 	hubsoftSyncProfiles.startScheduler(app);
+	serviceOrderCancellationsService.startAutomaticSyncWorker(app);
 
 	app.use((error, req, res, next) => {
 		if (res.headersSent) {

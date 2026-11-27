@@ -60,6 +60,10 @@ export async function buscarStatusSyncCancelamentos(id) {
 	);
 }
 
+export async function buscarAutomacaoCancelamentos() {
+	return requestVpsApi("/service-orders/cancellations/sync/automation");
+}
+
 export async function sincronizarCompetenciaCancelamentos(competencia) {
 	return requestVpsApi("/service-orders/cancellations/sync", {
 		method: "POST",

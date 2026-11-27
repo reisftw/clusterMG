@@ -1,6 +1,7 @@
 const db = require("../../db");
 const documents = require("../../documents");
 const regionaisRepository = require("../../regionaisRepository");
+const hubsoftSyncProfiles = require("../../hubsoftSyncProfiles");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -8,6 +9,8 @@ const TIME_ZONE = "America/Sao_Paulo";
 const METABASE_CARD_UUID = "7c9f15dd-1e51-4c77-bc7c-d19cc74218f1";
 const METABASE_BASE_URL = "https://bi.sempre.hubsoft.com.br:8443";
 const CANCELLATIONS_PAGE_LIMIT = 15;
+const HUBSOFT_DASHBOARD_CANCELLATIONS_PATH = "/api/v1/dashboard/painel/movimento_base";
+const AUTOMATIC_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const SYNC_RUNNING_MAX_AGE_MS = Number(
 	process.env.HUBSOFT_CANCELLATIONS_RUNNING_MAX_AGE_MS || 30 * 60 * 1000,
 );
@@ -537,7 +540,7 @@ function mapHubsoftRow(row = {}, competencia, regionalMap = new Map()) {
 		grupoPadrao: cleanText(row.grupo_padrao || row.grupos_cliente),
 		velocidade: parseNumber(row.velocidade),
 		dataCancelamento,
-		motivoCancelamento: cleanText(row.motivo_cancelamento),
+		motivoCancelamento: cleanText(row.motivo_cancelamento || row.motivo),
 		usuarioCancelamento: cleanText(row.usuario_cancelamento),
 		cidade,
 		cidadeNormalizada: normalizeCityKey(cidade),
@@ -674,6 +677,54 @@ async function fetchMetabaseJson(competencia) {
 		throw error;
 	} finally {
 		clearTimeout(timeout);
+	}
+}
+
+function dashboardRows(payload = {}) {
+	return [payload, payload?.data, payload?.dados, payload?.items, payload?.registros,
+		payload?.resultados, payload?.data?.data, payload?.data?.items].find(Array.isArray) || [];
+}
+
+function dashboardLastPage(payload = {}) {
+	return [payload?.last_page, payload?.ultima_pagina, payload?.total_paginas,
+		payload?.meta?.last_page, payload?.pagination?.last_page, payload?.data?.last_page]
+		.map(Number).find((value) => Number.isFinite(value) && value > 0) || null;
+}
+
+async function fetchDashboardCancellations(competencia) {
+	const { startDate, endDate } = getMonthRange(competencia);
+	const session = await hubsoftSyncProfiles.createAutomationSession();
+	const rows = [];
+	const seen = new Set();
+	let previousFingerprint = "";
+	for (let page = 1; page <= 1000; page += 1) {
+		const payload = await hubsoftSyncProfiles.automationRequest(session,
+			HUBSOFT_DASHBOARD_CANCELLATIONS_PATH, {
+				method: "POST",
+				body: { data_inicio: startDate, data_fim: endDate, cidades: [], tipo: "cancelados", pagina: page },
+			});
+		const pageRows = dashboardRows(payload);
+		if (!pageRows.length) break;
+		const fingerprint = pageRows.slice(0, 3)
+			.map((row) => `${row.id_cliente_servico || ""}:${row.data_cancelamento || ""}`).join("|");
+		if (page > 1 && fingerprint === previousFingerprint) break;
+		previousFingerprint = fingerprint;
+		for (const row of pageRows) {
+			const key = buildUniqueKey(row);
+			if (!seen.has(key)) { seen.add(key); rows.push(row); }
+		}
+		const lastPage = dashboardLastPage(payload);
+		if ((lastPage && page >= lastPage) || (!lastPage && pageRows.length < 50)) break;
+	}
+	return rows;
+}
+
+async function fetchCancellationRows(competencia) {
+	try {
+		return await fetchDashboardCancellations(competencia);
+	} catch (error) {
+		console.warn("[service-order-cancellations] API oficial indisponivel; usando BI de contingencia:", error?.message || error);
+		return fetchMetabaseJson(competencia);
 	}
 }
 
@@ -921,7 +972,7 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 	let records = [];
 	let keys = [];
 	try {
-		const rows = await fetchMetabaseJson(normalizedCompetencia);
+		const rows = await fetchCancellationRows(normalizedCompetencia);
 		const regionalMap = await loadRegionalMap();
 		records = rows
 			.map((row) => mapHubsoftRow(row, normalizedCompetencia, regionalMap))
@@ -1551,12 +1602,61 @@ async function exportCsv(query = {}) {
 	return Buffer.from(`\ufeff${lines.join("\n")}`, "utf8");
 }
 
+async function getAutomationStatus() {
+	const competencia = currentCompetencia();
+	const result = await db.query(
+		`select * from service_order_cancellation_sync_runs
+		  where competencia = $1 order by started_at desc limit 1`,
+		[competencia],
+	);
+	const lastRun = result.rows[0] ? mapSyncRun(result.rows[0]) : null;
+	const base = lastRun?.finishedAt || lastRun?.startedAt;
+	return {
+		enabled: true,
+		intervalMinutes: 60,
+		competencia,
+		lastRun,
+		nextRunAt: base
+			? new Date(new Date(base).getTime() + AUTOMATIC_SYNC_INTERVAL_MS).toISOString()
+			: new Date().toISOString(),
+	};
+}
+
+async function runAutomaticSyncIfDue() {
+	const status = await getAutomationStatus();
+	if (status.lastRun?.status === "RUNNING" ||
+		(status.lastRun && Date.now() < new Date(status.nextRunAt).getTime())) {
+		return { skipped: true, status };
+	}
+	return startSync({ competencia: status.competencia }, {
+		uid: "cancellations-hourly",
+		nome: "Automacao horaria HubSoft",
+	});
+}
+
+function startAutomaticSyncWorker(app) {
+	if (process.env.NODE_ENV === "test" || process.env.VITEST) return null;
+	if (app?.locals?.cancellationsSyncTimer) return app.locals.cancellationsSyncTimer;
+	const run = () => runAutomaticSyncIfDue().catch((error) =>
+		console.error("[service-order-cancellations] Falha na automacao:", error?.message || error));
+	const bootstrap = setTimeout(run, 30_000);
+	bootstrap.unref?.();
+	const timer = setInterval(run, 5 * 60 * 1000);
+	timer.unref?.();
+	if (app?.locals) {
+		app.locals.cancellationsSyncBootstrapTimer = bootstrap;
+		app.locals.cancellationsSyncTimer = timer;
+	}
+	return timer;
+}
+
 module.exports = {
 	MANAGE_PERMISSIONS,
 	VIEW_PERMISSIONS,
 	exportCsv,
 	getRecord,
 	getSummary,
+	getAutomationStatus,
 	getSyncRun,
 	listCancellations,
 	listCompetencies,
@@ -1565,6 +1665,7 @@ module.exports = {
 	rebuildAgentCancellationTargetsRange,
 	startHistorySync,
 	startSync,
+	startAutomaticSyncWorker,
 	validateCompetency,
 	_normalizeCompany: normalizeCompany,
 	_normalizeTechnology: normalizeTechnology,
