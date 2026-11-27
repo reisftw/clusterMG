@@ -3115,6 +3115,8 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 			listAllRecordsForRun(metaRun?.id),
 			listAllRecordsForRun(storeRun?.id),
 		]);
+		const canApplyMeta = canApplyMetaAuditDataset(metaRun, metaRecords);
+		const canApplyStore = canApplyMetaAuditDataset(storeRun, storeRecords);
 		const metaByDate = groupRecordsBySourceDate(metaRecords);
 		const storeByDate = groupRecordsBySourceDate(storeRecords);
 		async function applyAuditDate(index) {
@@ -3126,20 +3128,24 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 			}
 			const metaDayRecords = metaByDate.get(date) || [];
 			const storeDayRecords = storeByDate.get(date) || [];
-			const metaOperational = await operationalImports.persistHubsoftMetaRecords({
-				profile: PROFILE.META_D0,
-				date,
-				records: metaDayRecords,
-				user,
-				quiet: true,
-			});
-			const storeOperational = await operationalImports.persistHubsoftMetaRecords({
-				profile: PROFILE.LOJA,
-				date,
-				records: storeDayRecords,
-				user,
-				quiet: true,
-			});
+			const metaOperational = canApplyMeta
+				? await operationalImports.persistHubsoftMetaRecords({
+					profile: PROFILE.META_D0,
+					date,
+					records: metaDayRecords,
+					user,
+					quiet: true,
+				})
+				: { skipped: true, reason: `UNSAFE_${metaRun?.status || "MISSING"}` };
+			const storeOperational = canApplyStore
+				? await operationalImports.persistHubsoftMetaRecords({
+					profile: PROFILE.LOJA,
+					date,
+					records: storeDayRecords,
+					user,
+					quiet: true,
+				})
+				: { skipped: true, reason: `UNSAFE_${storeRun?.status || "MISSING"}` };
 			results.push({
 				date,
 				metaRunId: metaRun?.id,
@@ -3699,6 +3705,10 @@ function groupRecordsBySourceDate(records = []) {
 	return grouped;
 }
 
+function canApplyMetaAuditDataset(run, records = []) {
+	return run?.status === RUN_STATUS.COMPLETE && records.length > 0;
+}
+
 async function getProfilesOverview() {
 	const visibleProfiles = VISIBLE_PROFILES;
 	const runs = await db.query(
@@ -3800,5 +3810,6 @@ module.exports = {
 		schedulerProfileDue,
 		standaloneStoreDue,
 		shouldRetryMapMatchRun,
+		canApplyMetaAuditDataset,
 	},
 };

@@ -80,3 +80,20 @@ test("lock usa ownership exclusivo e só é liberado pelo mesmo owner", async ()
 		db.query = originalQuery;
 	}
 });
+
+test("auditoria de metas só aplica datasets completos e persistidos", () => {
+	assert.equal(
+		__testables.canApplyMetaAuditDataset({ status: "COMPLETE" }, [{ id: "1" }]),
+		true,
+	);
+	for (const status of ["SUSPICIOUS", "INCOMPLETE", "VALID_EMPTY_RESULT", "FAILED"]) {
+		assert.equal(
+			__testables.canApplyMetaAuditDataset({ status }, [{ id: "1" }]),
+			false,
+		);
+	}
+	assert.equal(
+		__testables.canApplyMetaAuditDataset({ status: "COMPLETE" }, []),
+		false,
+	);
+});
