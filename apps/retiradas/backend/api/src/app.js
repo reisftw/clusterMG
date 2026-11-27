@@ -71,6 +71,7 @@ const serviceOrderCancellationsService = require("./serviceOrders/cancellations/
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const createServiceOrderRequestsRouter = require("./serviceOrders/requests/routes/serviceOrderRequestsRoutes");
 const createPortReleaseRouter = require("./serviceOrders/portRelease/routes/portReleaseRoutes");
+const portReleaseService = require("./serviceOrders/portRelease/portReleaseService");
 const createReturnReceiptsRouter = require("./serviceOrders/returnReceipts/routes/returnReceiptsRoutes");
 const createStoreDeliveriesRouter = require("./storeDeliveries/routes/storeDeliveriesRoutes");
 const createRetorninhoRouter = require("./retorninho/routes/retorninhoRoutes");
@@ -6128,7 +6129,7 @@ function createApp() {
 		evolutionMessaging,
 	});
 
-	hubsoftSyncProfiles.startScheduler(app);
+	hubsoftSyncProfiles.startScheduler(app, { portReleaseService });
 
 	app.use((error, req, res, next) => {
 		if (res.headersSent) {

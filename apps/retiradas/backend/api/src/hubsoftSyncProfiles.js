@@ -78,6 +78,7 @@ const SCHEDULER_USER = {
 const HUBSOFT_INSTANCE_ID = cleanText(process.env.HUBSOFT_INSTANCE_ID) ||
 	`${os.hostname()}:${process.pid}:${crypto.randomUUID()}`;
 let schedulerTickRunning = false;
+let schedulerDependencies = {};
 let mapMatchSchedulerRunning = false;
 let mapMatchSchedulerStartedAt = 0;
 let automationSessionCache = null;
@@ -173,6 +174,12 @@ function normalizeAutomationConfig(config = {}) {
 			config.autoDailyCheckpointHours,
 		),
 		autoMetaTime: normalizeTime(config.autoMetaTime, "03:00"),
+		autoPortReleaseEnabled: config.autoPortReleaseEnabled !== false,
+		autoPortReleaseIntervalMinutes: asPositiveNumber(
+			config.autoPortReleaseIntervalMinutes,
+			30,
+			{ min: 5, max: 24 * 60 },
+		),
 		autoFinesIntervalMinutes: asPositiveNumber(
 			config.autoFinesIntervalMinutes,
 			60,
@@ -3528,6 +3535,35 @@ async function runFinesScheduler({ rawConfig, config, now, results }) {
 	});
 }
 
+async function runPortReleaseScheduler({ rawConfig, config, now, results }) {
+	const service = schedulerDependencies.portReleaseService;
+	const due = config.autoPortReleaseEnabled &&
+		minutesSince(rawConfig.autoPortReleaseLastAttemptAt) >= config.autoPortReleaseIntervalMinutes;
+	if (!service?.startScan || !due) return;
+
+	const date = addDays(now.date, -1);
+	const storeResult = await runProfileSafely(PROFILE.LOJA, { date });
+	results.push({ profile: PROFILE.LOJA, source: "PORT_RELEASE_D1", result: storeResult });
+	const attemptedAt = new Date().toISOString();
+	await saveSchedulerState({ autoPortReleaseLastAttemptAt: attemptedAt });
+	if (!succeeded(storeResult)) return;
+
+	try {
+		const scan = await service.startScan({ startDate: date, endDate: date }, SCHEDULER_USER);
+		await saveSchedulerState({
+			autoPortReleaseLastRunAt: attemptedAt,
+			autoPortReleaseLastScanId: scan.id,
+		});
+		results.push({ profile: "PORT_RELEASE_D1", result: scan });
+	} catch (error) {
+		if (error?.statusCode === 409) {
+			results.push({ profile: "PORT_RELEASE_D1", skipped: "already_running" });
+			return;
+		}
+		throw error;
+	}
+}
+
 async function runSchedulerTick() {
 	if (schedulerTickRunning) return { ok: true, skipped: "already_running" };
 	schedulerTickRunning = true;
@@ -3541,6 +3577,7 @@ async function runSchedulerTick() {
 		const storeAttemptedThisTick = await runDailyScheduler({ rawConfig, config, now, results });
 		await runPreviousDayScheduler({ rawConfig, config, now, results });
 		await runStoreScheduler({ rawConfig, config, now, results, storeAttemptedThisTick });
+		await runPortReleaseScheduler({ rawConfig, config, now, results });
 		await runFinesScheduler({ rawConfig, config, now, results });
 		results.push(...(await runMapMatchScheduler(rawConfig, config)));
 		return { ok: true, results };
@@ -3549,7 +3586,8 @@ async function runSchedulerTick() {
 	}
 }
 
-function startScheduler(app) {
+function startScheduler(app, dependencies = {}) {
+	schedulerDependencies = dependencies;
 	if (app?.locals?.hubsoftSyncProfilesTimer) return app.locals.hubsoftSyncProfilesTimer;
 	setImmediate(() => {
 		releaseOrphanedSchedulerLocks()
@@ -3681,7 +3719,7 @@ async function getProfilesOverview() {
 	const lastRunByProfile = new Map(
 		runs.rows.map((run) => [run.profile, run]),
 	);
-	return visibleProfiles.map((profile) => {
+	const profiles = visibleProfiles.map((profile) => {
 		const lastRun = lastRunByProfile.get(profile) || null;
 		const lock = lockByProfile.get(profile) || null;
 		return {
@@ -3692,6 +3730,34 @@ async function getProfilesOverview() {
 			lock,
 		};
 	});
+	const portRelease = (await db.query(
+		`select * from service_order_port_release_scans order by created_at desc limit 1`,
+	)).rows[0] || null;
+	const active = ["QUEUED", "DISCOVERING", "PROCESSING"].includes(portRelease?.status);
+	profiles.push({
+		profile: "PORT_RELEASE_D1",
+		status: active ? RUN_STATUS.RUNNING : portRelease?.status || "NEVER_RUN",
+		locked: active,
+		lock: null,
+		lastRun: portRelease ? {
+			...portRelease,
+			started_at: portRelease.started_at || portRelease.created_at,
+			expected_total: portRelease.attendances_scanned,
+			unique_rows: portRelease.customers_matched,
+			unclassified: Number(portRelease.failed || 0) + Number(portRelease.indeterminate || 0),
+			result_summary: {
+				stage: portRelease.phase,
+				attendances: portRelease.attendances_scanned,
+				customers: portRelease.customers_matched,
+				orders: portRelease.orders_found,
+				succeeded: portRelease.succeeded,
+				skipped: portRelease.skipped,
+				failed: portRelease.failed,
+				indeterminate: portRelease.indeterminate,
+			},
+		} : null,
+	});
+	return profiles;
 }
 
 module.exports = {
@@ -3729,6 +3795,7 @@ module.exports = {
 		isTransientHubsoftStatus,
 		mapMatchRetryDelay,
 		normalizeAutomationConfig,
+		runPortReleaseScheduler,
 		releaseLock,
 		schedulerProfileDue,
 		standaloneStoreDue,

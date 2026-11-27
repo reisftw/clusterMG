@@ -56,6 +56,12 @@ const HUBSOFT_PROFILES = [
 	{ id: "MAPA", label: "Mapa", helper: "O.S. abertas para Mensageria" },
 	{ id: "MATCH", label: "Match", helper: "O.S. abertas para conciliação" },
 	{ id: "LOJA", label: "Loja D-1", helper: "Entregas em loja concluídas" },
+	{
+		id: "PORT_RELEASE_D1",
+		label: "Liberação de Portas D-1",
+		helper: "Executada após a conferência de Loja D-1",
+		automaticOnly: true,
+	},
 	{ id: "MULTAS", label: "Multas", helper: "Multa de equipamento por indisponibilidade" },
 	{ id: "META_D0", label: "Meta D+0", helper: "Acompanhamento do dia" },
 	{ id: "META_D_MINUS_ONE", label: "Meta D-1", helper: "Fechamento do dia anterior" },
@@ -315,7 +321,9 @@ function OverviewCard({ label, value, helper, icon, tone = "blue" }) {
 function HubsoftStatusCards({ config, profiles }) {
 	const latestRun = getLatestRun(
 		profiles,
-		HUBSOFT_PROFILES.map((profile) => profile.id),
+		HUBSOFT_PROFILES.filter((profile) => !profile.automaticOnly).map(
+			(profile) => profile.id,
+		),
 	);
 	const failed = (profiles || []).filter(
 		(item) => getStatusKind(item.status) === "error",
@@ -1069,6 +1077,15 @@ function getNextProfileRun(profileId, state, config) {
 			config.autoMetaEnabled !== false && config.autoSyncEnabled !== false,
 		);
 	}
+	if (profileId === "PORT_RELEASE_D1") {
+		if (config.autoPortReleaseEnabled === false || config.autoSyncEnabled === false) {
+			return "Automação desativada";
+		}
+		return addMinutes(
+			config.autoPortReleaseLastAttemptAt || lastRun?.started_at,
+			config.autoPortReleaseIntervalMinutes || 30,
+		);
+	}
 	if (profileId === "MULTAS") {
 		if (config.autoFinesEnabled === false || config.autoSyncEnabled === false) {
 			return "Automação desativada";
@@ -1129,6 +1146,7 @@ function HubsoftProfilesSection({
 					const lastRun = state.lastRun || {};
 					const ranking = lastRun.result_summary?.ranking || {};
 					const progress = lastRun.result_summary || {};
+					const isPortRelease = profile.id === "PORT_RELEASE_D1";
 					const running = profileRunning === profile.id || state.locked;
 					const history = (profileRuns || [])
 						.filter((run) => run.profile === profile.id)
@@ -1183,14 +1201,14 @@ function HubsoftProfilesSection({
 								<div className="flex justify-between gap-3">
 									<dt>Última execução</dt>
 									<dd>
-										<button
+										{!profile.automaticOnly ? <button
 											type="button"
 											disabled={!lastRun.id}
 											onClick={() => onOpenRun(lastRun)}
 											className="font-black text-blue-700 disabled:text-slate-500"
 										>
 											{formatDateTime(lastRun.started_at)}
-										</button>
+										</button> : <span className="font-black text-slate-700">{formatDateTime(lastRun.started_at)}</span>}
 									</dd>
 								</div>
 								<div className="flex justify-between gap-3">
@@ -1198,17 +1216,22 @@ function HubsoftProfilesSection({
 									<dd>{getNextProfileRun(profile.id, state, config)}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
-									<dt>Total</dt>
+									<dt>{isPortRelease ? "Atendimentos" : "Total"}</dt>
 									<dd>{formatNumber(lastRun.expected_total)}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
-									<dt>Únicos</dt>
+									<dt>{isPortRelease ? "Clientes com O.S." : "Únicos"}</dt>
 									<dd>{formatNumber(lastRun.unique_rows)}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
-									<dt>Não classificados</dt>
+									<dt>{isPortRelease ? "Falhas" : "Não classificados"}</dt>
 									<dd>{formatNumber(lastRun.unclassified)}</dd>
 								</div>
+								{isPortRelease ? <>
+									<div className="flex justify-between gap-3"><dt>O.S. encontradas</dt><dd>{formatNumber(progress.orders)}</dd></div>
+									<div className="flex justify-between gap-3"><dt>Alteradas</dt><dd>{formatNumber(progress.succeeded)}</dd></div>
+									<div className="flex justify-between gap-3"><dt>Ignoradas</dt><dd>{formatNumber(progress.skipped)}</dd></div>
+								</> : null}
 							</dl>
 							{ranking.cidades?.length ? (
 								<div className="mt-4 rounded-xl bg-slate-50 p-3">
@@ -1244,7 +1267,7 @@ function HubsoftProfilesSection({
 									</div>
 								</div>
 							) : null}
-							<button
+							{!profile.automaticOnly ? <button
 								type="button"
 								disabled={Boolean(profileRunning) || running}
 								onClick={() => onRunProfile(profile.id)}
@@ -1256,7 +1279,7 @@ function HubsoftProfilesSection({
 									<PlayCircle size={17} />
 								)}
 								Sincronizar agora
-							</button>
+							</button> : null}
 						</div>
 					);
 				})}
@@ -1422,6 +1445,26 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
 					<input
 						type="checkbox"
+						checked={config.autoPortReleaseEnabled !== false}
+						onChange={(event) => updateConfig("autoPortReleaseEnabled", event.target.checked)}
+					/>
+					Conferir Loja D-1 e liberar portas
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Liberação de portas a cada quantos minutos
+					</span>
+					<input
+						type="number"
+						min="5"
+						value={config.autoPortReleaseIntervalMinutes || 30}
+						onChange={(event) => updateConfig("autoPortReleaseIntervalMinutes", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
 						checked={config.autoSyncEnabled !== false}
 						onChange={(event) =>
 							updateConfig("autoSyncEnabled", event.target.checked)
@@ -1543,12 +1586,13 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 				</label>
 				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold text-slate-600 lg:col-span-3">
 					<p className="font-black uppercase text-slate-500">Últimas rotinas</p>
-					<div className="mt-3 grid gap-2 md:grid-cols-5">
+					<div className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
 						<p>Diário: {formatDateTime(config.autoDailyLastRunAt)}</p>
 						<p>Checkpoint: {formatDateTime(config.autoDailyLastCheckpointAt)}</p>
 						<p>Metas: {formatDateTime(config.autoMetaLastRunAt)}</p>
 						<p>Multas: {formatDateTime(config.autoFinesLastRunAt)}</p>
 						<p>Mapa/Match: {formatDateTime(config.autoMapMatchLastRunAt)}</p>
+						<p>Liberação D-1: {formatDateTime(config.autoPortReleaseLastRunAt)}</p>
 					</div>
 				</div>
 			</div>
