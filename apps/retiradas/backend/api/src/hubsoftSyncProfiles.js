@@ -306,6 +306,28 @@ function normalizeBaseUrl(value) {
 	return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+function resolveInternalBaseUrl(config = {}) {
+	const explicit = cleanText(
+		config.internalBaseUrl || process.env.HUBSOFT_INTERNAL_BASE_URL,
+	);
+	if (explicit) return normalizeBaseUrl(explicit);
+
+	const webBaseUrl = cleanText(
+		config.webBaseUrl || process.env.HUBSOFT_WEB_BASE_URL,
+	);
+	if (!webBaseUrl) return DEFAULT_INTERNAL_BASE_URL;
+	try {
+		const url = new URL(normalizeBaseUrl(webBaseUrl));
+		if (!url.hostname.startsWith("api.")) url.hostname = `api.${url.hostname}`;
+		url.pathname = "";
+		url.search = "";
+		url.hash = "";
+		return url.toString().replace(/\/+$/, "");
+	} catch {
+		return DEFAULT_INTERNAL_BASE_URL;
+	}
+}
+
 async function readConfig() {
 	const item = await documents.getDocument(CONFIG_PATH).catch(() => null);
 	return item?.data || {};
@@ -567,11 +589,7 @@ async function authenticateWithPlaywright(config) {
 			throw error;
 		}
 		return {
-			baseUrl: normalizeBaseUrl(
-				config.internalBaseUrl ||
-					process.env.HUBSOFT_INTERNAL_BASE_URL ||
-					DEFAULT_INTERNAL_BASE_URL,
-			),
+			baseUrl: resolveInternalBaseUrl(config),
 			token: auth.token,
 			tokenType: auth.tokenType,
 		};
@@ -598,12 +616,7 @@ async function buildAutomationSession() {
 	);
 	if (configuredToken) {
 		return {
-			baseUrl: normalizeBaseUrl(
-				config.internalBaseUrl ||
-					process.env.HUBSOFT_INTERNAL_BASE_URL ||
-					config.baseUrl ||
-					DEFAULT_INTERNAL_BASE_URL,
-			),
+			baseUrl: resolveInternalBaseUrl(config),
 			token: configuredToken,
 			tokenType: cleanText(config.tokenType || "Bearer"),
 			sessionDay: currentSessionDay(),
@@ -3805,6 +3818,7 @@ module.exports = {
 		isTransientHubsoftStatus,
 		mapMatchRetryDelay,
 		normalizeAutomationConfig,
+		resolveInternalBaseUrl,
 		runPortReleaseScheduler,
 		releaseLock,
 		schedulerProfileDue,

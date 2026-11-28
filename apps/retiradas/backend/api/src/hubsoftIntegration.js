@@ -18,6 +18,7 @@ const DEFAULT_CONFIG = {
 	username: "",
 	password: "",
 	webBaseUrl: "https://sempre.hubsoft.com.br",
+	internalBaseUrl: "",
 	webUsername: "",
 	webPassword: "",
 	grantType: "password",
@@ -89,6 +90,7 @@ function normalizeConfig(config = {}) {
 		webBaseUrl: normalizeBaseUrl(
 			config.webBaseUrl || "https://sempre.hubsoft.com.br",
 		),
+		internalBaseUrl: normalizeBaseUrl(config.internalBaseUrl),
 		webUsername: cleanText(config.webUsername),
 		webPassword: cleanText(config.webPassword),
 		grantType: cleanText(config.grantType || "password"),

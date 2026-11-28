@@ -20,6 +20,22 @@ test("classifica apenas falhas transitórias para retry e aplica backoff exponen
 	assert.equal(__testables.hubsoftRetryDelay(2, () => 0), 1_500);
 });
 
+test("deriva a API interna do domínio HubSoft informado pela empresa", () => {
+	assert.equal(
+		__testables.resolveInternalBaseUrl({
+			webBaseUrl: "https://empresa.hubsoft.com.br/",
+		}),
+		"https://api.empresa.hubsoft.com.br",
+	);
+	assert.equal(
+		__testables.resolveInternalBaseUrl({
+			webBaseUrl: "https://empresa.hubsoft.com.br",
+			internalBaseUrl: "https://integracao.empresa.example/api/",
+		}),
+		"https://integracao.empresa.example/api",
+	);
+});
+
 test("limita chamadas HubSoft concorrentes no processo", async () => {
 	const originalFetch = global.fetch;
 	const pending = [];
