@@ -3761,9 +3761,14 @@ async function getProfilesOverview() {
 			lock,
 		};
 	});
-	const portRelease = (await db.query(
-		`select * from service_order_port_release_scans order by created_at desc limit 1`,
-	)).rows[0] || null;
+	let portRelease = null;
+	try {
+		portRelease = (await db.query(
+			`select * from service_order_port_release_scans order by created_at desc limit 1`,
+		)).rows[0] || null;
+	} catch (error) {
+		if (error?.code !== "42P01") throw error;
+	}
 	const active = ["QUEUED", "DISCOVERING", "PROCESSING"].includes(portRelease?.status);
 	profiles.push({
 		profile: "PORT_RELEASE_D1",
