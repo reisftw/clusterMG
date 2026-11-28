@@ -2617,7 +2617,7 @@ async function persistRecords(runId, profile, records, options = {}) {
 		inserted += result.rows.filter((row) => row.inserted).length;
 		updated += result.rows.filter((row) => !row.inserted).length;
 		await options.onProgress?.({
-			stage: `Salvando lote ${batchNumber} de ${Math.ceil(records.length / PERSIST_BATCH_SIZE)}`,
+			stage: `Salvando lote ${batchNumber} de ${Math.ceil(recordsToPersist.length / PERSIST_BATCH_SIZE)}`,
 			percent: Math.min(82, 72 + Math.round(((offset + batch.length) / Math.max(1, recordsToPersist.length)) * 10)),
 			checkpointBatch: batchNumber,
 		});
