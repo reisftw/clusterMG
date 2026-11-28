@@ -36,6 +36,16 @@ test("deriva a API interna do domínio HubSoft informado pela empresa", () => {
 	);
 });
 
+test("aceita pequenas duplicidades na coleta diaria de entregas em loja", () => {
+	assert.equal(
+		__testables.shouldTolerateDuplicateRows("META_AUDIT_STORE", {
+			receivedRows: 592,
+			duplicateRows: 2,
+		}),
+		true,
+	);
+});
+
 test("limita chamadas HubSoft concorrentes no processo", async () => {
 	const originalFetch = global.fetch;
 	const pending = [];
