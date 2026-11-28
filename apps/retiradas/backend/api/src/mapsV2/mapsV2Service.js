@@ -393,8 +393,7 @@ function isAvailableTechnician(value) {
 function requestAlreadyEffected(current, snapshot = {}) {
 	const targetTechnician = text(snapshot.technicianHubsoftName);
 	return Boolean(
-		current?.status === "EFFECTUATION_FAILED" &&
-			targetTechnician &&
+		targetTechnician &&
 			normalize(current?.tecnico) === normalize(targetTechnician),
 	);
 }
