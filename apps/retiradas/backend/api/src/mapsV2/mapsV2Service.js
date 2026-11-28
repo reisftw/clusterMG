@@ -399,6 +399,55 @@ function requestAlreadyEffected(current, snapshot = {}) {
 	);
 }
 
+function selectRequestOrderCandidate(rows = [], snapshot = {}) {
+	const eligible = rows.filter(validateOrderRow);
+	const orderNumber = text(snapshot.orderNumber).replace(/\D/g, "");
+	if (orderNumber) {
+		const exact = eligible.find(
+			(row) => text(row.num_os).replace(/\D/g, "") === orderNumber,
+		);
+		if (exact) return exact;
+	}
+	const clientCode = text(snapshot.clientCode).replace(/\D/g, "");
+	if (!clientCode) return null;
+	const sameClient = eligible.filter(
+		(row) => text(row.codigo_cliente).replace(/\D/g, "") === clientCode,
+	);
+	return sameClient.length === 1 ? sameClient[0] : null;
+}
+
+async function relinkRequestOrder(client, current, snapshot = {}) {
+	if (current.order_id) return current;
+	const orderNumber = text(snapshot.orderNumber);
+	const clientCode = text(snapshot.clientCode);
+	if (!orderNumber && !clientCode) return current;
+	const candidates = await client.query(
+		`select id, num_os, codigo_cliente, status, tecnico, tipo
+		   from ordens_servico
+		  where ($1 <> '' and regexp_replace(coalesce(num_os, ''), '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g'))
+		     or ($2 <> '' and regexp_replace(coalesce(codigo_cliente, ''), '\\D', '', 'g') = regexp_replace($2, '\\D', '', 'g'))
+		  order by updated_at desc
+		  limit 20`,
+		[orderNumber, clientCode],
+	);
+	const recovered = selectRequestOrderCandidate(candidates.rows, snapshot);
+	if (!recovered) return current;
+	await client.query(
+		`update maps_assignment_requests
+		    set order_id = $2, updated_at = now()
+		  where id = $1`,
+		[current.id, recovered.id],
+	);
+	return {
+		...current,
+		order_id: recovered.id,
+		order_status: recovered.status,
+		tecnico: recovered.tecnico,
+		tipo: recovered.tipo,
+		codigo_cliente: recovered.codigo_cliente,
+	};
+}
+
 function categoryForOrder(row, user) {
 	if (
 		row.open_request_status === "EFFECTED" &&
@@ -1021,12 +1070,13 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 		);
 		current = currentResult.rows[0];
 		if (!current) throw apiError("Solicitacao nao encontrada.", 404);
-		if (!current.order_id) {
-			throw apiError("A O.S. nao esta mais aberta no Maps.", 409, "ORDER_CHANGED");
-		}
 		const snapshot = current.source_snapshot && typeof current.source_snapshot === "object"
 			? current.source_snapshot
 			: {};
+		current = await relinkRequestOrder(client, current, snapshot);
+		if (!current.order_id) {
+			throw apiError("A O.S. nao esta mais aberta no Maps.", 409, "ORDER_CHANGED");
+		}
 		if (approve && ["APPROVED", "PENDING_EFFECTUATION", "EFFECTED"].includes(current.status)) {
 			await client.query("commit");
 			client.release();
@@ -2808,6 +2858,7 @@ module.exports = {
 		haversineMeters,
 		isAvailableTechnician,
 		requestAlreadyEffected,
+		selectRequestOrderCandidate,
 		mapPoint,
 		normalizeAdminPresentationSettings,
 		normalize,

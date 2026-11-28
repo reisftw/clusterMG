@@ -66,3 +66,34 @@ test("retry recognizes an order already assigned to the requested technician", (
 		false,
 	);
 });
+
+test("relinks a pending request by its exact order number", () => {
+	const selected = service.__testables.selectRequestOrderCandidate(
+		[
+			{ id: "other", num_os: "999", codigo_cliente: "570194", tipo: "RETIRADA FTTH", status: "Pendente" },
+			{ id: "expected", num_os: "014326228000650761", codigo_cliente: "570194", tipo: "RETIRADA FTTH", status: "Pendente" },
+		],
+		{ orderNumber: "014326228000650761", clientCode: "570194" },
+	);
+	assert.equal(selected.id, "expected");
+});
+
+test("only falls back to client code when one eligible order exists", () => {
+	assert.equal(
+		service.__testables.selectRequestOrderCandidate(
+			[{ id: "only", num_os: "123", codigo_cliente: "570194", tipo: "RETIRADA FTTH", status: "Pendente" }],
+			{ clientCode: "570194" },
+		).id,
+		"only",
+	);
+	assert.equal(
+		service.__testables.selectRequestOrderCandidate(
+			[
+				{ id: "one", num_os: "123", codigo_cliente: "570194", tipo: "RETIRADA FTTH", status: "Pendente" },
+				{ id: "two", num_os: "456", codigo_cliente: "570194", tipo: "RETIRADA FTTH", status: "Pendente" },
+			],
+			{ clientCode: "570194" },
+		),
+		null,
+	);
+});
