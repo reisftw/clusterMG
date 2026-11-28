@@ -14,7 +14,7 @@
 
 /* Maps mobile-first workspace */
 .maps-v2-page{grid-template-rows:auto auto auto auto minmax(0,1fr);gap:8px;min-width:0}
-.maps-v2-search{position:relative;grid-template-columns:auto minmax(0,1fr) auto auto;height:48px;padding:0 8px 0 14px;overflow:visible;z-index:35}
+.maps-v2-search{position:relative;grid-template-columns:auto minmax(0,1fr) auto auto;height:48px;padding:0 8px 0 14px;overflow:visible;z-index:6}
 .maps-v2-search input{border-right:0;font-size:14px}
 .maps-v2-search-loader{color:var(--maps-blue)}
 .maps-v2-search-clear{display:grid;width:34px;height:34px;place-items:center;border:0;border-radius:7px;background:#f1f5f9;color:#64748b;cursor:pointer}
