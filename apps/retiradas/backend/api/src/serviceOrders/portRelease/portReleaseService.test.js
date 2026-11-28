@@ -99,6 +99,24 @@ test("seleciona somente o tipo ENTREGA DE EQUIPAMENTO EM LOJA", () => {
 	assert.equal(__testables.isResolvedStoreDeliveryAttendance({ id_tipo_atendimento: 826, status: { prefixo: "pendente" } }, 826), false);
 });
 
+test("cruza cliente por código ou ID mesmo em estruturas alternativas do HubSoft", () => {
+	assert.deepEqual(__testables.customerKeys({ cliente_servico: { codigo_cliente: "00508", id_cliente: 77 } }), ["code:00508", "id:77"]);
+	assert.deepEqual(__testables.customerKeys({ cliente_servico: { cliente: { codigo_cliente: 508, id_cliente: 77 } } }), ["code:508", "id:77"]);
+});
+
+test("consulta o período completo do dia no fuso de São Paulo", () => {
+	assert.equal(__testables.hubsoftDayRange("2026-11-27T00:00:00.000Z"), "2026-11-27T00:00:00.000-03:00");
+	assert.equal(__testables.hubsoftDayRange(new Date("2026-11-27T00:00:00.000Z")), "2026-11-27T00:00:00.000-03:00");
+	assert.equal(__testables.hubsoftDayRange("2026-11-27T00:00:00.000Z", true), "2026-11-27T23:59:59.999-03:00");
+});
+
+test("aceita qualquer O.S de retirada aberta, não só IDs previamente configurados", () => {
+	const order = { tipo_ordem_servico: { id_tipo_ordem_servico: 777, descricao: "RETIRADA ESPECIAL" }, status: "pendente" };
+	assert.equal(__testables.isWithdrawalType(order), true);
+	assert.equal(__testables.isWithdrawalType({ id_tipo_ordem_servico: 777, descricao: "RETIRADA ESPECIAL" }), true);
+	assert.equal(__testables.classifyOrder(order, config), "ELIGIBLE");
+});
+
 async function operationResult(orderResponses, configOverride = config) {
 	const originalQuery = db.query;
 	const originalRequest = hubsoft.automationRequest;

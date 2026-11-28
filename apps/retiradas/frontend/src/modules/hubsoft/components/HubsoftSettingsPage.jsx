@@ -63,8 +63,8 @@ const HUBSOFT_PROFILES = [
 	{ id: "LOJA", label: "Loja D-1", helper: "Entregas em loja concluídas" },
 	{
 		id: "PORT_RELEASE_D1",
-		label: "Liberação de Portas D-1",
-		helper: "Executada após a conferência de Loja D-1",
+		label: "Liberação de Portas do dia",
+		helper: "Executada de hora em hora após conferir as entregas resolvidas",
 		automaticOnly: true,
 	},
 	{ id: "MULTAS", label: "Multas", helper: "Multa de equipamento por indisponibilidade" },
@@ -1105,7 +1105,7 @@ function getNextProfileRun(profileId, state, config) {
 		}
 		return addMinutes(
 			config.autoPortReleaseLastAttemptAt || lastRun?.started_at,
-			config.autoPortReleaseIntervalMinutes || 30,
+			config.autoPortReleaseIntervalMinutes || 60,
 		);
 	}
 	if (profileId === "MULTAS") {
@@ -1488,7 +1488,7 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 						checked={config.autoPortReleaseEnabled !== false}
 						onChange={(event) => updateConfig("autoPortReleaseEnabled", event.target.checked)}
 					/>
-					Conferir Loja D-1 e liberar portas
+					Conferir entregas resolvidas do dia e liberar portas
 				</label>
 				<label className="block">
 					<span className="text-xs font-black uppercase text-slate-500">
@@ -1497,7 +1497,7 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 					<input
 						type="number"
 						min="5"
-						value={config.autoPortReleaseIntervalMinutes || 30}
+						value={config.autoPortReleaseIntervalMinutes || 60}
 						onChange={(event) => updateConfig("autoPortReleaseIntervalMinutes", event.target.value)}
 						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
 					/>

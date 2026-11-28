@@ -26,7 +26,7 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	autoMetaEnabled: true,
 	autoMetaTime: "03:00",
 	autoPortReleaseEnabled: true,
-	autoPortReleaseIntervalMinutes: 30,
+	autoPortReleaseIntervalMinutes: 60,
 	autoPortReleaseLastAttemptAt: "",
 	autoPortReleaseLastRunAt: "",
 	autoPortReleaseLastScanId: "",
