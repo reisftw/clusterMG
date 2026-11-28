@@ -2662,7 +2662,7 @@ function validateCollected(collected, uniqueRows) {
 }
 
 function shouldTolerateDuplicateRows(profile, collectedStats = {}) {
-	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.LOJA].includes(profile)) return false;
+	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.LOJA, PROFILE.META_AUDIT_STORE].includes(profile)) return false;
 	const duplicates = Number(collectedStats.duplicateRows || 0);
 	const receivedRows = Number(collectedStats.receivedRows || 0);
 	if (duplicates <= 0 || receivedRows <= 0) return false;
@@ -3833,5 +3833,6 @@ module.exports = {
 		standaloneStoreDue,
 		shouldRetryMapMatchRun,
 		canApplyMetaAuditDataset,
+		shouldTolerateDuplicateRows,
 	},
 };
