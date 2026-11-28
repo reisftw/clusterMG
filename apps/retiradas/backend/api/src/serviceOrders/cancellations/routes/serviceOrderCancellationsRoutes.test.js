@@ -16,6 +16,11 @@ function buildApp() {
 			run: { id: "run-1", competencia: body.competencia, status: "RUNNING" },
 			user: user.uid,
 		}),
+		reclassifyTechnology: async (id, body, user) => ({
+			item: { id, classificacaoTecnologia: body.classification },
+			updated: 3,
+			user: user.uid,
+		}),
 	};
 	const originalService = require.cache[servicePath];
 	const originalRoutes = require.cache[routesPath];
@@ -82,6 +87,21 @@ test("consulta o andamento sem expor uma execucao inexistente", async () => {
 	try {
 		await request(context.app).get("/sync/known").expect(200);
 		await request(context.app).get("/sync/missing").expect(404);
+	} finally {
+		context.restore();
+	}
+});
+
+test("salva a classificacao manual pelo backend", async () => {
+	const context = buildApp();
+	try {
+		const response = await request(context.app)
+			.patch("/record-1/technology")
+			.send({ classification: "FTTH", type: "Fibra" })
+			.expect(200);
+		assert.equal(response.body.item.classificacaoTecnologia, "FTTH");
+		assert.equal(response.body.updated, 3);
+		assert.equal(response.body.user, "user-1");
 	} finally {
 		context.restore();
 	}

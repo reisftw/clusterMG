@@ -3,6 +3,7 @@ import {
 	Building2,
 	CalendarDays,
 	ChevronRight,
+	Clock3,
 	MapPin,
 	Search,
 	TrendingDown,
@@ -26,6 +27,14 @@ function normalize(value) {
 		.normalize("NFD")
 		.replace(/[\u0300-\u036f]/g, "")
 		.toLowerCase();
+}
+
+function formatDateTime(value) {
+	if (!value) return "Aguardando sincronização";
+	const date = new Date(value);
+	return Number.isNaN(date.getTime())
+		? "Aguardando sincronização"
+		: date.toLocaleString("pt-BR");
 }
 
 function Metric({ icon: Icon, label, value, helper, tone = "blue" }) {
@@ -93,8 +102,14 @@ export default function TabCidades({ data, month = "Janeiro", error = "", onRefr
 		<section className="cities-dashboard">
 			<div className="cities-hero">
 				<div><span>Cancelamentos por localidade</span><h2>Cidades, regionais e empresas</h2><p>Visão anual atualizada pela mesma sincronização dos cancelamentos.</p></div>
-				<div className="cities-company-switch" aria-label="Filtrar empresa">
-					{["TODAS", "SEMPRE", "ONNET"].map((item) => <button key={item} type="button" className={company === item ? "active" : ""} onClick={() => setCompany(item)}>{item === "TODAS" ? "Todas" : item}</button>)}
+				<div className="cities-hero-actions">
+					<div className="cities-sync-card">
+						<Clock3 size={18} />
+						<div><span>Última atualização</span><strong>Sincronizado em {formatDateTime(data?.updatedAt)}</strong></div>
+					</div>
+					<div className="cities-company-switch" aria-label="Filtrar empresa">
+						{["TODAS", "SEMPRE", "ONNET"].map((item) => <button key={item} type="button" className={company === item ? "active" : ""} onClick={() => setCompany(item)}>{item === "TODAS" ? "Todas" : item}</button>)}
+					</div>
 				</div>
 			</div>
 

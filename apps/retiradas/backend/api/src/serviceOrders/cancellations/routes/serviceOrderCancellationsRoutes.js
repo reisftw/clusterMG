@@ -184,6 +184,29 @@ function createServiceOrderCancellationsRouter({
 		},
 	);
 
+	router.patch(
+		"/:id/technology",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireManage,
+		async (req, res, next) => {
+			try {
+				const result = await service.reclassifyTechnology(
+					req.params.id,
+					req.body || {},
+					req.user || {},
+				);
+				if (!result) {
+					res.status(404).json({ error: "Cancelamento nao encontrado." });
+					return;
+				}
+				res.json(result);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	return router;
 }
 

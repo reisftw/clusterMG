@@ -3762,10 +3762,20 @@ async function getProfilesOverview() {
 		};
 	});
 	let portRelease = null;
+	let portReleaseToday = 0;
 	try {
-		portRelease = (await db.query(
-			`select * from service_order_port_release_scans order by created_at desc limit 1`,
-		)).rows[0] || null;
+		[portRelease, portReleaseToday] = await Promise.all([
+			db.query(
+				`select * from service_order_port_release_scans order by created_at desc limit 1`,
+			).then((result) => result.rows[0] || null),
+			db.query(
+				`select count(distinct service_order_number)::int as total
+				   from service_order_port_release_operations
+				  where status = 'SUCCESS'
+				    and (requested_at at time zone 'America/Sao_Paulo')::date =
+				        (now() at time zone 'America/Sao_Paulo')::date`,
+			).then((result) => Number(result.rows[0]?.total || 0)),
+		]);
 	} catch (error) {
 		if (error?.code !== "42P01") throw error;
 	}
@@ -3787,6 +3797,7 @@ async function getProfilesOverview() {
 				customers: portRelease.customers_matched,
 				orders: portRelease.orders_found,
 				succeeded: portRelease.succeeded,
+				succeededToday: portReleaseToday,
 				skipped: portRelease.skipped,
 				failed: portRelease.failed,
 				indeterminate: portRelease.indeterminate,
