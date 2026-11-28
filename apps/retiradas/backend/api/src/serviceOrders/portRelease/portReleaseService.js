@@ -68,7 +68,15 @@ function orderNumber(order = {}) {
 }
 
 function clientCode(order = {}) {
-	return digits(order.codigo_cliente || order.cliente?.codigo_cliente || order.cliente_servico?.cliente?.codigo_cliente);
+	return digits(order.codigo_cliente || order.cliente?.codigo_cliente || order.cliente_servico?.codigo_cliente || order.cliente_servico?.cliente?.codigo_cliente);
+}
+
+function clientId(order = {}) {
+	return digits(order.id_cliente || order.cliente?.id_cliente || order.cliente_servico?.id_cliente || order.cliente_servico?.cliente?.id_cliente);
+}
+
+function customerKeys(record = {}) {
+	return [clientCode(record) && `code:${clientCode(record)}`, clientId(record) && `id:${clientId(record)}`].filter(Boolean);
 }
 
 function clientName(order = {}) {
@@ -85,7 +93,11 @@ function typeId(order = {}) {
 
 function typeName(order = {}) {
 	const type = orderType(order);
-	return clean(type?.descricao || type?.display || type?.name || order.tipo || order.tipo_os);
+	return clean(type?.descricao || type?.display || type?.name || order.descricao || order.tipo || order.tipo_os);
+}
+
+function isWithdrawalType(order = {}) {
+	return normalizeStatus(typeName(order)).includes("retirada");
 }
 
 function company(order = {}) {
@@ -141,7 +153,8 @@ function classifyOrder(order, config) {
 	const targetId = Number(config?.target_type?.id || 0);
 	if (!config || !targetId) return "REVIEW_REQUIRED";
 	if (typeId(order) === targetId) return "ALREADY_CLASSIFIED";
-	return config.open_statuses.includes(normalizeStatus(order.status_ordem_servico || order.status)) && configuredTypeIds(config).includes(typeId(order))
+	const sourceType = configuredTypeIds(config).includes(typeId(order)) || isWithdrawalType(order);
+	return config.open_statuses.includes(normalizeStatus(order.status_ordem_servico || order.status)) && sourceType
 		? "ELIGIBLE"
 		: "REVIEW_REQUIRED";
 }
@@ -336,8 +349,9 @@ async function queryDay(session, day, types, statuses) {
 	return rows;
 }
 
-function attendanceClientCode(item = {}) {
-	return digits(item.cliente_servico?.cliente?.codigo_cliente || item.codigo_cliente);
+function hubsoftDayRange(value, endOfDay = false) {
+	const day = value instanceof Date ? value.toISOString().slice(0, 10) : clean(value).slice(0, 10);
+	return `${day}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}-03:00`;
 }
 
 function findStoreDeliveryAttendanceType(metadata = {}) {
@@ -375,8 +389,8 @@ async function queryFinalizedAttendances(session, scan, metadata) {
 			{
 				method: "POST",
 				body: {
-					data_inicio: scan.start_date,
-					data_fim: scan.end_date,
+					data_inicio: hubsoftDayRange(scan.start_date),
+					data_fim: hubsoftDayRange(scan.end_date, true),
 					tipo_data: "data_fechamento",
 					order_by: "data_fechamento",
 					order_by_key: "DESC",
@@ -391,12 +405,13 @@ async function queryFinalizedAttendances(session, scan, metadata) {
 		const rows = (Array.isArray(pager.data) ? pager.data : []).filter((item) =>
 			isResolvedStoreDeliveryAttendance(item, storeDeliveryType.id_tipo_atendimento));
 		for (const item of rows) {
-			const code = attendanceClientCode(item);
-			if (!code || !item.data_fechamento) continue;
-			if (!customers.has(code)) customers.set(code, {
+			const keys = customerKeys(item);
+			if (!keys.length || !item.data_fechamento) continue;
+			const attendance = {
 				attendanceId: clean(item.id_atendimento),
 				closedAt: item.data_fechamento,
-			});
+			};
+			for (const key of keys) if (!customers.has(key)) customers.set(key, attendance);
 		}
 		scanned += rows.length;
 		lastPage = Number(pager.last_page || 1);
@@ -410,9 +425,7 @@ async function queryFinalizedAttendances(session, scan, metadata) {
 }
 
 async function queryOpenOrders(session, configs, metadata, scan) {
-	const allTypeIds = new Set(configs.flatMap(configuredTypeIds));
-	const types = (metadata.tipos_ordem_servico || []).filter((item) =>
-		allTypeIds.has(Number(item.id_tipo_ordem_servico || item.id)));
+	const types = (metadata.tipos_ordem_servico || []).filter(isWithdrawalType);
 	const statuses = [...new Set(configs.flatMap((item) => item.open_statuses || []))];
 	const rows = [];
 	let page = 1;
@@ -512,9 +525,9 @@ async function runScan(id) {
 		const orders = await queryOpenOrders(session, configs, orderMetadata, scan);
 		await assertScanActive(id);
 		const matches = orders
-			.filter((order) => customers.has(clientCode(order)))
-			.filter((order) => classifyOrder(order, configFor(configs, order)) === "ELIGIBLE")
-			.map((order) => ({ order, attendance: customers.get(clientCode(order)) }));
+			.map((order) => ({ order, attendance: customerKeys(order).map((key) => customers.get(key)).find(Boolean) }))
+			.filter((item) => item.attendance)
+			.filter((item) => classifyOrder(item.order, configFor(configs, item.order)) === "ELIGIBLE");
 		await createAutomaticBatch(scan, matches, configs);
 	} catch (error) {
 		await db.query(
@@ -1000,4 +1013,4 @@ async function exportRows(query = {}, format = "csv") {
 }
 
 module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getScan, getSearch, initialize, listHistory, listScans, parseCodes, retryOperation, saveConfig, search, startScan, stats, stopScan,
-	__testables: { applyOperationalTarget, applyTargetType, classifyOrder, clientCode, company, evidence, findQueueTechnician, findStoreDeliveryAttendanceType, hasOperationalTarget, isResolvedStoreDeliveryAttendance, normalizeStatus, orderId, paginationOf, parseScanRange, processOperation, typeId } };
+	__testables: { applyOperationalTarget, applyTargetType, classifyOrder, clientCode, clientId, company, customerKeys, evidence, findQueueTechnician, findStoreDeliveryAttendanceType, hasOperationalTarget, hubsoftDayRange, isResolvedStoreDeliveryAttendance, isWithdrawalType, normalizeStatus, orderId, paginationOf, parseScanRange, processOperation, typeId } };

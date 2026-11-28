@@ -77,10 +77,10 @@ test("nao executa LOJA duas vezes quando a rotina diaria ja a executou no mesmo 
 	}), true);
 });
 
-test("configura a liberacao de portas D-1 a cada 30 minutos por padrao", () => {
+test("configura a liberacao de portas do dia a cada 60 minutos por padrao", () => {
 	const defaults = __testables.normalizeAutomationConfig({});
 	assert.equal(defaults.autoPortReleaseEnabled, true);
-	assert.equal(defaults.autoPortReleaseIntervalMinutes, 30);
+	assert.equal(defaults.autoPortReleaseIntervalMinutes, 60);
 
 	const configured = __testables.normalizeAutomationConfig({
 		autoPortReleaseEnabled: false,

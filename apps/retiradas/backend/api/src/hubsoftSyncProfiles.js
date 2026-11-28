@@ -177,7 +177,7 @@ function normalizeAutomationConfig(config = {}) {
 		autoPortReleaseEnabled: config.autoPortReleaseEnabled !== false,
 		autoPortReleaseIntervalMinutes: asPositiveNumber(
 			config.autoPortReleaseIntervalMinutes,
-			30,
+			60,
 			{ min: 5, max: 24 * 60 },
 		),
 		autoFinesIntervalMinutes: asPositiveNumber(
@@ -3547,7 +3547,7 @@ async function runPortReleaseScheduler({ rawConfig, config, now, results }) {
 		minutesSince(rawConfig.autoPortReleaseLastAttemptAt) >= config.autoPortReleaseIntervalMinutes;
 	if (!service?.startScan || !due) return;
 
-	const date = addDays(now.date, -1);
+	const date = now.date;
 	const storeResult = await runProfileSafely(PROFILE.LOJA, { date });
 	results.push({ profile: PROFILE.LOJA, source: "PORT_RELEASE_D1", result: storeResult });
 	const attemptedAt = new Date().toISOString();
