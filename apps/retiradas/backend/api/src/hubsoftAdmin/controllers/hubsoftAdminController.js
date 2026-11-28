@@ -23,7 +23,35 @@ function createHubsoftAdminController({ hubsoftIntegration, hubsoftSyncProfiles 
 
 	async function testConnection(_req, res, next) {
 		try {
-			res.json(await hubsoftIntegration.testConnection());
+			const config = await hubsoftIntegration.readConfig({ sanitized: false });
+			const officialApiConfigured = Boolean(
+				config.baseUrl &&
+					config.clientId &&
+					config.clientSecret &&
+					config.username &&
+					config.password,
+			);
+			if (officialApiConfigured) {
+				res.json({
+					...(await hubsoftIntegration.testConnection()),
+					mode: "OFFICIAL_API",
+				});
+				return;
+			}
+
+			const session = await hubsoftSyncProfiles.createAutomationSession({
+				force: true,
+			});
+			await hubsoftSyncProfiles.automationRequest(
+				session,
+				"/api/v1/ordem_servico/create",
+				{ retryTransient: false },
+			);
+			res.json({
+				ok: true,
+				checkedAt: new Date().toISOString(),
+				mode: "AUTHENTICATED_WEB_JSON",
+			});
 		} catch (error) {
 			next(error);
 		}

@@ -1458,7 +1458,7 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 			nextUpdate={nextCheckpoint(config)}
 			defaultOpen={false}
 		>
-			<div className="grid gap-4 lg:grid-cols-3">
+			<div className="grid gap-4 lg:grid-cols-2">
 				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
 					<input
 						type="checkbox"
@@ -1468,6 +1468,22 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 						}
 					/>
 					Rotina automática ativa
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						URL interna da API (opcional)
+					</span>
+					<input
+						value={config.internalBaseUrl || ""}
+						onChange={(event) =>
+							updateConfig("internalBaseUrl", event.target.value)
+						}
+						placeholder="Detectada automaticamente pelo endereço do HubSoft"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+					<p className="mt-1 text-xs font-semibold text-slate-500">
+						Deixe em branco para usar automaticamente o domínio API correspondente.
+					</p>
 				</label>
 				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
 					<input

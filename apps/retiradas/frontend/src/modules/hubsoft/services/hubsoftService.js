@@ -9,6 +9,7 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	username: "",
 	password: "",
 	webBaseUrl: "https://sempre.hubsoft.com.br",
+	internalBaseUrl: "",
 	webUsername: "",
 	webPassword: "",
 	grantType: "password",
