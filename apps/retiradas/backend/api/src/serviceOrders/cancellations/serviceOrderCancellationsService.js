@@ -1127,6 +1127,21 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 	let inserted = 0;
 	let updated = 0;
 	let deleted = 0;
+	if (records.length === 0) {
+		const existing = await db.query(
+			`select count(*)::int as total
+			   from service_order_cancellation_records
+			  where competencia = $1`,
+			[normalizedCompetencia],
+		);
+		if (Number(existing.rows[0]?.total || 0) > 0) {
+			const error = new Error(
+				"HubSoft retornou zero cancelamentos; dados anteriores foram preservados.",
+			);
+			await markSyncFailed(runId, normalizedCompetencia, error);
+			throw error;
+		}
+	}
 	const maxWriteAttempts = 4;
 	const lockKey = syncLockKey(normalizedCompetencia);
 	for (let attempt = 1; attempt <= maxWriteAttempts; attempt += 1) {
