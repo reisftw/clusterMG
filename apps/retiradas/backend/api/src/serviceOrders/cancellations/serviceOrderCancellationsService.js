@@ -823,12 +823,13 @@ async function fetchMetabaseJson(competencia) {
 }
 
 function dashboardRows(payload = {}) {
-	return [payload, payload?.data, payload?.dados, payload?.items, payload?.registros,
+	return [payload, payload?.data, payload?.dados?.servicos, payload?.dados, payload?.items, payload?.registros,
 		payload?.resultados, payload?.data?.data, payload?.data?.items].find(Array.isArray) || [];
 }
 
 function dashboardLastPage(payload = {}) {
 	return [payload?.last_page, payload?.ultima_pagina, payload?.total_paginas,
+		payload?.dados?.ultima_pagina,
 		payload?.meta?.last_page, payload?.pagination?.last_page, payload?.data?.last_page]
 		.map(Number).find((value) => Number.isFinite(value) && value > 0) || null;
 }

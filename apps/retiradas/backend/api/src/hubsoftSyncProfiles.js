@@ -306,6 +306,28 @@ function normalizeBaseUrl(value) {
 	return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+function resolveInternalBaseUrl(config = {}) {
+	const explicit = cleanText(
+		config.internalBaseUrl || process.env.HUBSOFT_INTERNAL_BASE_URL,
+	);
+	if (explicit) return normalizeBaseUrl(explicit);
+
+	const webBaseUrl = cleanText(
+		config.webBaseUrl || process.env.HUBSOFT_WEB_BASE_URL,
+	);
+	if (!webBaseUrl) return DEFAULT_INTERNAL_BASE_URL;
+	try {
+		const url = new URL(normalizeBaseUrl(webBaseUrl));
+		if (!url.hostname.startsWith("api.")) url.hostname = `api.${url.hostname}`;
+		url.pathname = "";
+		url.search = "";
+		url.hash = "";
+		return url.toString().replace(/\/+$/, "");
+	} catch {
+		return DEFAULT_INTERNAL_BASE_URL;
+	}
+}
+
 async function readConfig() {
 	const item = await documents.getDocument(CONFIG_PATH).catch(() => null);
 	return item?.data || {};
@@ -567,11 +589,7 @@ async function authenticateWithPlaywright(config) {
 			throw error;
 		}
 		return {
-			baseUrl: normalizeBaseUrl(
-				config.internalBaseUrl ||
-					process.env.HUBSOFT_INTERNAL_BASE_URL ||
-					DEFAULT_INTERNAL_BASE_URL,
-			),
+			baseUrl: resolveInternalBaseUrl(config),
 			token: auth.token,
 			tokenType: auth.tokenType,
 		};
@@ -598,12 +616,7 @@ async function buildAutomationSession() {
 	);
 	if (configuredToken) {
 		return {
-			baseUrl: normalizeBaseUrl(
-				config.internalBaseUrl ||
-					process.env.HUBSOFT_INTERNAL_BASE_URL ||
-					config.baseUrl ||
-					DEFAULT_INTERNAL_BASE_URL,
-			),
+			baseUrl: resolveInternalBaseUrl(config),
 			token: configuredToken,
 			tokenType: cleanText(config.tokenType || "Bearer"),
 			sessionDay: currentSessionDay(),
@@ -2534,10 +2547,18 @@ function runDateRangeOptions(profile, options = {}) {
 async function persistRecords(runId, profile, records, options = {}) {
 	let inserted = 0;
 	let updated = 0;
-	const activeIds = records.map((record) => record.hubsoft_id);
-	for (let offset = 0; offset < records.length; offset += PERSIST_BATCH_SIZE) {
+	const recordsToPersist = [
+		...new Map(
+			records.map((record) => [
+				`${record.profile}\u0000${record.entity_type}\u0000${record.hubsoft_id}`,
+				record,
+			]),
+		).values(),
+	];
+	const activeIds = recordsToPersist.map((record) => record.hubsoft_id);
+	for (let offset = 0; offset < recordsToPersist.length; offset += PERSIST_BATCH_SIZE) {
 		const batchNumber = Math.floor(offset / PERSIST_BATCH_SIZE) + 1;
-		const batch = records.slice(offset, offset + PERSIST_BATCH_SIZE).map((record) => ({
+		const batch = recordsToPersist.slice(offset, offset + PERSIST_BATCH_SIZE).map((record) => ({
 			...record,
 			source_date: record.source_date || safeTimestamp(extractDateFromHubsoftProtocol(record.hubsoft_number)),
 			raw_excerpt: record.raw_excerpt || {},
@@ -2596,8 +2617,8 @@ async function persistRecords(runId, profile, records, options = {}) {
 		inserted += result.rows.filter((row) => row.inserted).length;
 		updated += result.rows.filter((row) => !row.inserted).length;
 		await options.onProgress?.({
-			stage: `Salvando lote ${batchNumber} de ${Math.ceil(records.length / PERSIST_BATCH_SIZE)}`,
-			percent: Math.min(82, 72 + Math.round(((offset + batch.length) / Math.max(1, records.length)) * 10)),
+			stage: `Salvando lote ${batchNumber} de ${Math.ceil(recordsToPersist.length / PERSIST_BATCH_SIZE)}`,
+			percent: Math.min(82, 72 + Math.round(((offset + batch.length) / Math.max(1, recordsToPersist.length)) * 10)),
 			checkpointBatch: batchNumber,
 		});
 	}
@@ -2641,7 +2662,7 @@ function validateCollected(collected, uniqueRows) {
 }
 
 function shouldTolerateDuplicateRows(profile, collectedStats = {}) {
-	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.LOJA].includes(profile)) return false;
+	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.LOJA, PROFILE.META_AUDIT_STORE].includes(profile)) return false;
 	const duplicates = Number(collectedStats.duplicateRows || 0);
 	const receivedRows = Number(collectedStats.receivedRows || 0);
 	if (duplicates <= 0 || receivedRows <= 0) return false;
@@ -3740,9 +3761,14 @@ async function getProfilesOverview() {
 			lock,
 		};
 	});
-	const portRelease = (await db.query(
-		`select * from service_order_port_release_scans order by created_at desc limit 1`,
-	)).rows[0] || null;
+	let portRelease = null;
+	try {
+		portRelease = (await db.query(
+			`select * from service_order_port_release_scans order by created_at desc limit 1`,
+		)).rows[0] || null;
+	} catch (error) {
+		if (error?.code !== "42P01") throw error;
+	}
 	const active = ["QUEUED", "DISCOVERING", "PROCESSING"].includes(portRelease?.status);
 	profiles.push({
 		profile: "PORT_RELEASE_D1",
@@ -3805,11 +3831,13 @@ module.exports = {
 		isTransientHubsoftStatus,
 		mapMatchRetryDelay,
 		normalizeAutomationConfig,
+		resolveInternalBaseUrl,
 		runPortReleaseScheduler,
 		releaseLock,
 		schedulerProfileDue,
 		standaloneStoreDue,
 		shouldRetryMapMatchRun,
 		canApplyMetaAuditDataset,
+		shouldTolerateDuplicateRows,
 	},
 };
