@@ -2539,10 +2539,18 @@ function runDateRangeOptions(profile, options = {}) {
 async function persistRecords(runId, profile, records, options = {}) {
 	let inserted = 0;
 	let updated = 0;
-	const activeIds = records.map((record) => record.hubsoft_id);
-	for (let offset = 0; offset < records.length; offset += PERSIST_BATCH_SIZE) {
+	const recordsToPersist = [
+		...new Map(
+			records.map((record) => [
+				`${record.profile}\u0000${record.entity_type}\u0000${record.hubsoft_id}`,
+				record,
+			]),
+		).values(),
+	];
+	const activeIds = recordsToPersist.map((record) => record.hubsoft_id);
+	for (let offset = 0; offset < recordsToPersist.length; offset += PERSIST_BATCH_SIZE) {
 		const batchNumber = Math.floor(offset / PERSIST_BATCH_SIZE) + 1;
-		const batch = records.slice(offset, offset + PERSIST_BATCH_SIZE).map((record) => ({
+		const batch = recordsToPersist.slice(offset, offset + PERSIST_BATCH_SIZE).map((record) => ({
 			...record,
 			source_date: record.source_date || safeTimestamp(extractDateFromHubsoftProtocol(record.hubsoft_number)),
 			raw_excerpt: record.raw_excerpt || {},
@@ -2602,7 +2610,7 @@ async function persistRecords(runId, profile, records, options = {}) {
 		updated += result.rows.filter((row) => !row.inserted).length;
 		await options.onProgress?.({
 			stage: `Salvando lote ${batchNumber} de ${Math.ceil(records.length / PERSIST_BATCH_SIZE)}`,
-			percent: Math.min(82, 72 + Math.round(((offset + batch.length) / Math.max(1, records.length)) * 10)),
+			percent: Math.min(82, 72 + Math.round(((offset + batch.length) / Math.max(1, recordsToPersist.length)) * 10)),
 			checkpointBatch: batchNumber,
 		});
 	}
