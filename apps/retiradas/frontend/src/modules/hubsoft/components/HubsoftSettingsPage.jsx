@@ -1269,7 +1269,8 @@ function HubsoftProfilesSection({
 								</div>
 								{isPortRelease ? <>
 									<div className="flex justify-between gap-3"><dt>O.S. encontradas</dt><dd>{formatNumber(progress.orders)}</dd></div>
-									<div className="flex justify-between gap-3"><dt>Alteradas</dt><dd>{formatNumber(progress.succeeded)}</dd></div>
+									<div className="flex justify-between gap-3"><dt>Alteradas nesta execução</dt><dd>{formatNumber(progress.succeeded)}</dd></div>
+									<div className="flex justify-between gap-3"><dt>Alteradas hoje</dt><dd>{formatNumber(progress.succeededToday)}</dd></div>
 									<div className="flex justify-between gap-3"><dt>Ignoradas</dt><dd>{formatNumber(progress.skipped)}</dd></div>
 								</> : null}
 							</dl>

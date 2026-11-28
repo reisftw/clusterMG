@@ -12,6 +12,7 @@ const METABASE_BASE_URL = "https://bi.sempre.hubsoft.com.br:8443";
 const CANCELLATIONS_PAGE_LIMIT = 15;
 const HUBSOFT_DASHBOARD_CANCELLATIONS_PATH = "/api/v1/dashboard/painel/movimento_base";
 const AUTOMATIC_SYNC_INTERVAL_MS = 60 * 60 * 1000;
+const TECHNOLOGY_RULES_PATH = "config/cancellation_technology_rules";
 const SYNC_RUNNING_MAX_AGE_MS = Number(
 	process.env.HUBSOFT_CANCELLATIONS_RUNNING_MAX_AGE_MS || 30 * 60 * 1000,
 );
@@ -186,6 +187,7 @@ async function getPublicCancellationCities(query = {}) {
 			   from service_order_cancellation_records
 			  where competencia like $1
 			    and empresa_normalizada in ('SEMPRE', 'ONNET')
+			    and classificacao_tecnologia = 'FTTH'
 			  group by competencia,
 			           coalesce(cidade, 'Sem cidade'),
 			           coalesce(regional_nome, 'Sem regional'),
@@ -544,13 +546,37 @@ function normalizeTechnology(row = {}) {
 		row.grupos_cliente,
 	].join(" "));
 	if (
+		["WIRELESS", "RADIO", "DEDICADO", "CLEAR CHANNEL", "B2B"].some(
+			(marker) => haystack.includes(marker),
+		)
+	) {
+		return { original, classification: "NAO_FTTH" };
+	}
+	if (
 		haystack.includes("FIBRA") ||
 		haystack.includes("FIBRA OPTICA") ||
+		haystack.includes("FIBER") ||
 		haystack.includes("FTTH")
 	) {
 		return { original, classification: "FTTH" };
 	}
+	const speed = /(\d{1,5}(?:[.,]\d{1,3})?) *(GB|MB)/.exec(haystack);
+	if (speed) {
+		const megabits = Number(speed[1].replace(",", ".")) * (speed[2] === "GB" ? 1000 : 1);
+		if (megabits >= 50) return { original, classification: "FTTH" };
+	}
 	return { original, classification: "NAO_FTTH" };
+}
+
+function technologyModelKey(row = {}) {
+	return normalizeKey(row.servico || row.tecnologia || row.tecnologia_original);
+}
+
+async function loadTechnologyRules() {
+	const item = await documents.getDocument(TECHNOLOGY_RULES_PATH).catch(() => null);
+	return item?.data?.rules && typeof item.data.rules === "object"
+		? item.data.rules
+		: {};
 }
 
 function normalizeCompany(row = {}) {
@@ -657,10 +683,19 @@ async function loadRegionalMap() {
 	return map;
 }
 
-function mapHubsoftRow(row = {}, competencia, regionalMap = new Map()) {
+function mapHubsoftRow(
+	row,
+	competencia,
+	regionalMap = new Map(),
+	technologyRules = {},
+) {
 	const dataCancelamento = parseDate(row.data_cancelamento);
 	const company = normalizeCompany(row);
-	const technology = normalizeTechnology(row);
+	const inferredTechnology = normalizeTechnology(row);
+	const rule = technologyRules[technologyModelKey(row)];
+	const technology = rule
+		? { original: cleanText(rule.type), classification: rule.classification }
+		: inferredTechnology;
 	const cidade = cleanText(row.cidade);
 	const regional = regionalMap.get(normalizeCityKey(cidade)) || {};
 	return {
@@ -998,8 +1033,12 @@ async function upsertCancellationRecord(client, record) {
 			empresa_original = excluded.empresa_original,
 			empresa_normalizada = excluded.empresa_normalizada,
 			servico = excluded.servico,
-			tecnologia_original = excluded.tecnologia_original,
-			classificacao_tecnologia = excluded.classificacao_tecnologia,
+			tecnologia_original = coalesce(nullif(excluded.tecnologia_original, ''), service_order_cancellation_records.tecnologia_original),
+			classificacao_tecnologia = case
+				when nullif(excluded.tecnologia_original, '') is null
+					then service_order_cancellation_records.classificacao_tecnologia
+				else excluded.classificacao_tecnologia
+			end,
 			grupo_servico = excluded.grupo_servico,
 			grupo_padrao = excluded.grupo_padrao,
 			velocidade = excluded.velocidade,
@@ -1116,9 +1155,14 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 	let keys = [];
 	try {
 		const rows = await fetchCancellationRows(normalizedCompetencia);
-		const regionalMap = await loadRegionalMap();
+		const [regionalMap, technologyRules] = await Promise.all([
+			loadRegionalMap(),
+			loadTechnologyRules(),
+		]);
 		records = rows
-			.map((row) => mapHubsoftRow(row, normalizedCompetencia, regionalMap))
+			.map((row) =>
+				mapHubsoftRow(row, normalizedCompetencia, regionalMap, technologyRules),
+			)
 			.filter((record) => record.dataCancelamento);
 		keys = records.map((record) => record.uniqueKey);
 	} catch (error) {
@@ -1522,6 +1566,92 @@ async function getRecord(id) {
 	return result.rows[0] ? mapRecord(result.rows[0]) : null;
 }
 
+async function reclassifyTechnology(id, payload = {}, user = {}) {
+	const classification = normalizeKey(payload.classification);
+	if (!["FTTH", "NAO_FTTH"].includes(classification)) {
+		const error = new Error("Classificacao deve ser FTTH ou NAO_FTTH.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const type = cleanText(payload.type);
+	if (!type) {
+		const error = new Error("Informe o tipo de tecnologia.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const currentResult = await db.query(
+		`select * from service_order_cancellation_records where id = $1`,
+		[id],
+	);
+	const current = currentResult.rows[0];
+	if (!current) return null;
+	const modelKey = technologyModelKey(current);
+	if (!modelKey) {
+		const error = new Error("Este registro nao possui modelo ou servico para calibrar.");
+		error.statusCode = 400;
+		throw error;
+	}
+
+	const rules = await loadTechnologyRules();
+	const now = new Date().toISOString();
+	rules[modelKey] = {
+		model: cleanText(current.servico || current.tecnologia_original),
+		classification,
+		type,
+		updatedAt: now,
+		updatedBy: userDisplayName(user),
+	};
+	await documents.upsertDocument({
+		path: TECHNOLOGY_RULES_PATH,
+		collectionPath: "config",
+		documentId: "cancellation_technology_rules",
+		parentPath: null,
+		data: { rules, updatedAt: now, updatedBy: userDisplayName(user) },
+	});
+
+	const candidates = await db.query(
+		`select id, competencia, servico, tecnologia_original
+		   from service_order_cancellation_records`,
+	);
+	const matches = candidates.rows.filter((row) => technologyModelKey(row) === modelKey);
+	const ids = matches.map((row) => row.id);
+	if (ids.length) {
+		await db.query(
+			`update service_order_cancellation_records
+			    set classificacao_tecnologia = $2,
+			        tecnologia_original = $3
+			  where id = any($1::uuid[])`,
+			[ids, classification, type],
+		);
+		const competencias = [...new Set(matches.map((row) => row.competencia))];
+		await Promise.all(competencias.map(async (competencia) => {
+			const records = await db.query(
+				`select empresa_normalizada, classificacao_tecnologia, equipamento_comodato
+				   from service_order_cancellation_records where competencia = $1`,
+				[competencia],
+			);
+			const summary = buildSummary(records.rows);
+			await db.query(
+				`update service_order_cancellation_competencies
+				    set total_records = $2, summary = $3::jsonb
+				  where competencia = $1`,
+				[competencia, records.rowCount, JSON.stringify(summary)],
+			);
+		}));
+	}
+	broadcastRealtime("service-order-cancellations", {
+		type: "technology-reclassified",
+		model: rules[modelKey].model,
+		classification,
+		updated: ids.length,
+	});
+	return {
+		item: await getRecord(id),
+		updated: ids.length,
+		rule: rules[modelKey],
+	};
+}
+
 async function getSummary(query = {}) {
 	const competencia = parseCompetencia(query.competencia);
 	const competency = await getCompetency(competencia);
@@ -1641,13 +1771,20 @@ async function groupByCity(competencia) {
 
 async function groupByTechnology(competencia) {
 	const result = await db.query(
-		`select coalesce(tecnologia_original, 'Sem tecnologia') as tecnologia,
+		`select case
+		          when nullif(trim(tecnologia_original), '') is not null then tecnologia_original
+		          when classificacao_tecnologia = 'FTTH' then 'Fibra inferida pelo plano'
+		          when upper(coalesce(servico, '')) similar to '%(WIRELESS|RADIO)%' then 'Wireless / Radio'
+		          when upper(coalesce(servico, '')) like '%DEDICADO%' then 'Link dedicado'
+		          when upper(coalesce(servico, '')) similar to '%(B2B|CLEAR CHANNEL)%' then 'B2B / Clear Channel'
+		          else 'Outro nao FTTH'
+		        end as tecnologia,
 		        empresa_normalizada as empresa,
 		        classificacao_tecnologia as classificacao,
 		        count(*)::int as total
 		   from service_order_cancellation_records
 		  where competencia = $1
-		  group by coalesce(tecnologia_original, 'Sem tecnologia'), empresa_normalizada, classificacao_tecnologia
+		  group by tecnologia, empresa_normalizada, classificacao_tecnologia
 		  order by total desc, tecnologia`,
 		[competencia],
 	);
@@ -1825,12 +1962,14 @@ module.exports = {
 	listCompetencies,
 	listFilterOptions,
 	listSyncHistory,
+	reclassifyTechnology,
 	rebuildAgentCancellationTargetsRange,
 	startHistorySync,
 	startSync,
 	startAutomaticSyncWorker,
 	validateCompetency,
 	_buildPublicCancellationCities: buildPublicCancellationCities,
+	_mapHubsoftRow: mapHubsoftRow,
 	_normalizeCompany: normalizeCompany,
 	_normalizeTechnology: normalizeTechnology,
 	_parseDate: parseDate,

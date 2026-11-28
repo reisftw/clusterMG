@@ -91,6 +91,13 @@ export async function buscarDetalheCancelamento(id) {
 	);
 }
 
+export async function reclassificarTecnologiaCancelamento(id, payload) {
+	return requestVpsApi(
+		`/service-orders/cancellations/${encodeURIComponent(id)}/technology`,
+		{ method: "PATCH", body: JSON.stringify(payload) },
+	);
+}
+
 export function buildCancelamentosExportUrl(params = {}) {
 	return `${getApiBaseUrl()}/service-orders/cancellations/export.csv${queryString(params)}`;
 }

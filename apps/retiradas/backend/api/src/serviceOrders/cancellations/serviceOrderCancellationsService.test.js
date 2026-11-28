@@ -3,7 +3,45 @@ const test = require("node:test");
 
 const {
 	_buildPublicCancellationCities,
+	_mapHubsoftRow,
+	_normalizeTechnology,
 } = require("./serviceOrderCancellationsService");
+
+test("classifica planos FIBER migrados como FTTH", () => {
+	assert.equal(
+		_normalizeTechnology({
+			servico: "(Migrado - onnetpatrocinio) FIBER 1P - 400 MB - 99,90",
+		}).classification,
+		"FTTH",
+	);
+});
+
+test("classifica planos de alta velocidade como FTTH sem confundir tecnologias legadas", () => {
+	assert.equal(
+		_normalizeTechnology({ servico: "SEMPRE PLUS | 300MB R$89,90" }).classification,
+		"FTTH",
+	);
+	assert.equal(
+		_normalizeTechnology({ servico: "COMBO WIRELESS RURAL 5MBPS" }).classification,
+		"NAO_FTTH",
+	);
+	assert.equal(
+		_normalizeTechnology({ servico: "B2B | LINK DEDICADO 500MB" }).classification,
+		"NAO_FTTH",
+	);
+});
+
+test("prioriza a calibragem manual do modelo nas sincronizacoes seguintes", () => {
+	const row = { servico: "MODELO TESTE 300MB", data_cancelamento: "2026-11-10" };
+	const mapped = _mapHubsoftRow(row, "2026-11", new Map(), {
+		"MODELO TESTE 300MB": {
+			classification: "NAO_FTTH",
+			type: "Wireless",
+		},
+	});
+	assert.equal(mapped.classificacaoTecnologia, "NAO_FTTH");
+	assert.equal(mapped.tecnologiaOriginal, "Wireless");
+});
 
 test("consolida cancelamentos públicos por empresa, mês, cidade e regional", () => {
 	const result = _buildPublicCancellationCities(

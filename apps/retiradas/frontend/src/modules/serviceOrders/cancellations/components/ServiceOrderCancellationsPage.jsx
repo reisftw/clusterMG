@@ -28,6 +28,7 @@ import {
 	buscarStatusSyncCancelamentos,
 	competenciaAtual,
 	sincronizarCompetenciaCancelamentos,
+	reclassificarTecnologiaCancelamento,
 	validarCompetenciaCancelamentos,
 } from "../services/serviceOrderCancellationsService";
 
@@ -98,7 +99,7 @@ function yearCompetenciaOptions(reference = competenciaAtual()) {
 	return MONTH_OPTIONS.map((month) => `${year}-${month}`);
 }
 
-function KpiCard({ title, value, helper, tone = "blue" }) {
+function KpiCard({ title, value, helper, tone = "blue", onClick }) {
 	const tones = {
 		blue: "bg-blue-50 text-blue-700 border-blue-100",
 		green: "bg-emerald-50 text-emerald-700 border-emerald-100",
@@ -106,8 +107,13 @@ function KpiCard({ title, value, helper, tone = "blue" }) {
 		red: "bg-red-50 text-red-700 border-red-100",
 		slate: "bg-slate-50 text-slate-700 border-slate-100",
 	};
+	const Tag = onClick ? "button" : "div";
 	return (
-		<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+		<Tag
+			type={onClick ? "button" : undefined}
+			onClick={onClick}
+			className={`rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm ${onClick ? "transition hover:border-blue-300 hover:shadow-md" : ""}`}
+		>
 			<p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
 				{title}
 			</p>
@@ -117,7 +123,7 @@ function KpiCard({ title, value, helper, tone = "blue" }) {
 					{helper}
 				</span>
 			</div>
-		</div>
+		</Tag>
 	);
 }
 
@@ -240,7 +246,13 @@ function CompactTable({ title, columns, rows, empty = "Sem dados." }) {
 	);
 }
 
-function DetailModal({ item, onClose }) {
+function DetailModal({ item, onClose, onSave, saving, canManage }) {
+	const [classification, setClassification] = useState(
+		item?.classificacaoTecnologia || "FTTH",
+	);
+	const [technologyType, setTechnologyType] = useState(
+		item?.tecnologiaOriginal || "",
+	);
 	if (!item) return null;
 	const groups = [
 		["Cliente", [
@@ -316,9 +328,99 @@ function DetailModal({ item, onClose }) {
 						</section>
 					))}
 				</div>
+				{canManage ? (
+					<section className="mx-6 mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+						<h3 className="text-sm font-black text-blue-950">Calibrar tecnologia deste modelo</h3>
+						<p className="mt-1 text-xs font-semibold text-blue-800">
+							A escolha será aplicada aos clientes com o mesmo serviço e mantida nas próximas sincronizações.
+						</p>
+						<div className="mt-4 grid gap-3 md:grid-cols-[220px_1fr_auto]">
+							<select
+								value={classification}
+								onChange={(event) => setClassification(event.target.value)}
+								className="h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm font-black text-slate-800"
+							>
+								<option value="FTTH">FTTH</option>
+								<option value="NAO_FTTH">Não FTTH</option>
+							</select>
+							<input
+								value={technologyType}
+								onChange={(event) => setTechnologyType(event.target.value)}
+								placeholder="Tipo: Fibra, Wireless, Link dedicado..."
+								className="h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none"
+							/>
+							<button
+								type="button"
+								disabled={saving || !technologyType.trim()}
+								onClick={() => onSave({ classification, type: technologyType.trim() })}
+								className="h-11 rounded-xl bg-blue-600 px-5 text-sm font-black text-white disabled:opacity-40"
+							>
+								{saving ? "Salvando..." : "Salvar regra"}
+							</button>
+						</div>
+					</section>
+				) : null}
 			</div>
 		</div>
 	);
+}
+
+function SyncHistoryList({ items }) {
+	const [page, setPage] = useState(1);
+	const totalPages = Math.max(1, Math.ceil(items.length / 5));
+	return (
+		<div className="space-y-2">
+			{items.slice((page - 1) * 5, page * 5).map((run) => (
+				<div key={run.id} className="rounded-2xl border border-slate-200 p-3">
+					<div className="flex items-center justify-between gap-3">
+						<p className="font-black text-slate-900">
+							{run.competencia ? competenciaLabel(run.competencia) : `${run.startCompetencia} até ${run.endCompetencia}`}
+						</p>
+						<StatusBadge status={run.status} />
+					</div>
+					<p className="mt-1 text-xs font-semibold text-slate-500">
+						{formatDateTime(run.startedAt)} · Total {formatNumber(run.totalHubsoft)}
+						{run.error ? ` · ${run.error}` : ""}
+					</p>
+				</div>
+			))}
+			{items.length > 5 ? (
+				<div className="flex items-center justify-between pt-2 text-sm font-black text-slate-600">
+					<span>Página {page} de {totalPages}</span>
+					<div className="flex gap-2">
+						<button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-40">Anterior</button>
+						<button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-xl border border-slate-200 px-3 py-2 disabled:opacity-40">Próxima</button>
+					</div>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
+async function saveTechnologyRule({
+	detail,
+	payload,
+	setActionLoading,
+	setDetail,
+	setError,
+	setSyncMessage,
+	reload,
+}) {
+	if (!detail?.id) return;
+	setActionLoading(true);
+	setError("");
+	try {
+		const response = await reclassificarTecnologiaCancelamento(detail.id, payload);
+		setDetail(response?.item || detail);
+		setSyncMessage(
+			`Regra salva e aplicada a ${formatNumber(response?.updated || 0)} registro(s) do mesmo modelo.`,
+		);
+		await reload();
+	} catch (err) {
+		setError(err?.message || "Não foi possível salvar a classificação.");
+	} finally {
+		setActionLoading(false);
+	}
 }
 
 export default function ServiceOrderCancellationsPage() {
@@ -564,6 +666,12 @@ export default function ServiceOrderCancellationsPage() {
 		}
 	}
 
+	function filterByClassification(classification) {
+		const next = { ...tableFilters, classificacao: classification };
+		setTableFilters(next);
+		void loadCompetencia(1, next);
+	}
+
 	const empresaRows = useMemo(() => {
 		const names = ["SEMPRE", "ONNET"];
 		const rows = names.map((name) => ({
@@ -725,8 +833,8 @@ export default function ServiceOrderCancellationsPage() {
 
 			<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 				<KpiCard title="Total de cancelamentos" value={formatNumber(currentSummary.geral.total)} helper="geral" />
-				<KpiCard title="FTTH / Fibra" value={formatNumber(currentSummary.geral.ftth)} helper={formatPercent((currentSummary.geral.ftth / Math.max(currentSummary.geral.total, 1)) * 100)} tone="green" />
-				<KpiCard title="Não FTTH" value={formatNumber(currentSummary.geral.naoFtth)} helper={formatPercent((currentSummary.geral.naoFtth / Math.max(currentSummary.geral.total, 1)) * 100)} tone="orange" />
+				<KpiCard title="FTTH / Fibra" value={formatNumber(currentSummary.geral.ftth)} helper={formatPercent((currentSummary.geral.ftth / Math.max(currentSummary.geral.total, 1)) * 100)} tone="green" onClick={() => filterByClassification("FTTH")} />
+				<KpiCard title="Não FTTH" value={formatNumber(currentSummary.geral.naoFtth)} helper={formatPercent((currentSummary.geral.naoFtth / Math.max(currentSummary.geral.total, 1)) * 100)} tone="orange" onClick={() => filterByClassification("NAO_FTTH")} />
 				<KpiCard title="Com equipamento" value={formatNumber(currentSummary.equipamentos?.comEquipamento)} helper="comodato" tone="blue" />
 				<KpiCard title="Sem equipamento" value={formatNumber(currentSummary.equipamentos?.semEquipamento)} helper="auditar" tone="slate" />
 			</section>
@@ -786,7 +894,7 @@ export default function ServiceOrderCancellationsPage() {
 					title="Tecnologias"
 					rows={summary?.tecnologias || []}
 					columns={[
-						{ key: "tecnologia", label: "Tecnologia original" },
+						{ key: "tecnologia", label: "Tipo identificado" },
 						{ key: "empresa", label: "Empresa" },
 						{ key: "classificacao", label: "Classificação" },
 						{ key: "total", label: "Quantidade", render: (row) => formatNumber(row.total) },
@@ -1005,26 +1113,26 @@ export default function ServiceOrderCancellationsPage() {
 							</button>
 						))}
 					</div>
-					<div className="space-y-2">
-						{syncHistory.map((run) => (
-							<div key={run.id} className="rounded-2xl border border-slate-200 p-3">
-								<div className="flex items-center justify-between gap-3">
-									<p className="font-black text-slate-900">
-										{run.competencia ? competenciaLabel(run.competencia) : `${run.startCompetencia} até ${run.endCompetencia}`}
-									</p>
-									<StatusBadge status={run.status} />
-								</div>
-								<p className="mt-1 text-xs font-semibold text-slate-500">
-									{formatDateTime(run.startedAt)} · Total {formatNumber(run.totalHubsoft)}
-									{run.error ? ` · ${run.error}` : ""}
-								</p>
-							</div>
-						))}
-					</div>
+					<SyncHistoryList items={syncHistory} />
 				</div>
 			</section>
 
-			<DetailModal item={detail} onClose={() => setDetail(null)} />
+			<DetailModal
+				key={detail?.id || "closed"}
+				item={detail}
+				onClose={() => setDetail(null)}
+				onSave={(payload) => void saveTechnologyRule({
+					detail,
+					payload,
+					setActionLoading,
+					setDetail,
+					setError,
+					setSyncMessage,
+					reload: () => loadCompetencia(pagination.page),
+				})}
+				saving={actionLoading}
+				canManage={isAdmin}
+			/>
 		</div>
 	);
 }
